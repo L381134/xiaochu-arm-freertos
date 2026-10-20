@@ -84,6 +84,24 @@ Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver(PCA9685_ADDR);
 // 打开后串口每 5 秒打印一次任务栈水位，调完栈大小记得关掉
 #define RTOS_DEBUG 1
 
+// ---------- 协议错误码（D3）----------
+// ★ 为什么这个枚举要放在文件这么靠前的位置？
+//   Arduino IDE 会在编译前自动给每个函数生成声明（原型），并插到文件前面。
+//   如果某个函数的返回类型或参数类型定义在文件中间，生成的原型就会引用到
+//   一个"还没被定义"的类型，编译器报 "xxx does not name a type"。
+//   所以凡是被函数原型引用到的类型，必须定义在所有函数之前。
+enum ProtoErr : uint8_t {
+  PROTO_OK = 0,
+  PROTO_ERR_START,     // 不是以 '$' 开头
+  PROTO_ERR_NO_STAR,   // 缺少 '*' 分隔符
+  PROTO_ERR_CHK_LEN,   // 校验位不是 2 位十六进制
+  PROTO_ERR_CHK,       // 校验值不匹配
+  PROTO_ERR_CMD,       // 未知指令类型
+  PROTO_ERR_RANGE,     // 参数越界
+  PROTO_ERR_FORMAT     // 字段残缺
+};
+#define PROTO_ERR_COUNT 8
+
 // ========================================================================
 //  一、机械层（与原版一致，只把 run() 改成"动了才写 I2C"）
 // ========================================================================
@@ -333,18 +351,7 @@ static bool enqueueCommand(const HandCommand& cmd) {
 //    这段代码跑在 BLE 回调里（协议栈任务上下文），堆分配会长期留下碎片。
 //    全程 const char* + 逐字符解析，零分配。
 // ========================================================================
-enum ProtoErr : uint8_t {
-  PROTO_OK = 0,
-  PROTO_ERR_START,     // 不是以 '$' 开头
-  PROTO_ERR_NO_STAR,   // 缺少 '*' 分隔符
-  PROTO_ERR_CHK_LEN,   // 校验位不是 2 位十六进制
-  PROTO_ERR_CHK,       // 校验值不匹配
-  PROTO_ERR_CMD,       // 未知指令类型
-  PROTO_ERR_RANGE,     // 参数越界
-  PROTO_ERR_FORMAT     // 字段残缺
-};
-#define PROTO_ERR_COUNT 8
-
+// （ProtoErr 枚举已定义在文件开头：它被 parseFrame 的原型引用，必须前置）
 static const char* const PROTO_ERR_NAME[PROTO_ERR_COUNT] = {
   "OK", "no-start", "no-star", "chk-len", "chk-mismatch", "bad-cmd", "range", "format"
 };
