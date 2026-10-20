@@ -259,6 +259,23 @@ static volatile bool bleConnected = false;
 static volatile bool needRestartAdv = false;
 static volatile bool markPending = false;  // 标记脚是否正等待本次指令执行完
 
+// ---------- 队列与断连保护实验（D2）----------
+// 三个实验全部由固件自己产生指令流，不需要上位机配合，也不需要任何仪器：
+//   test=flood   瞬间灌 100 条，验证"丢旧保新"
+//   test=stream  20Hz 连发 3 秒，测负载下的延迟与跟手性
+//   test=estop   持续扫动，由人手断开蓝牙，测断连→静止的耗时
+#define TEST_ENABLE 1
+static QueueHandle_t testReqQ = nullptr;
+
+static volatile uint32_t qDrop = 0;        // 因队列满被丢弃的指令数
+static volatile uint32_t qDepthMax = 0;    // 队列历史最大占用
+
+// 沉降检测：从某个时刻起，等到五根手指全部静止，打印耗时
+enum SettleKind : uint8_t { SETTLE_NONE = 0, SETTLE_FLOOD, SETTLE_STREAM, SETTLE_DISC };
+static volatile uint8_t  settleKind = SETTLE_NONE;
+static volatile uint32_t settleRefUs = 0;
+static bool settleSeenMoving = false;      // 先看到"在动"，再看到"静止"才算一次沉降
+
 // ---------- 延迟统计（D1）----------
 // 单次测量没有意义：指令落在 10ms 节拍窗口的位置是随机的，
 // 真正的指标是分布范围（jitter）而不是平均值。
@@ -280,9 +297,16 @@ static void latRecord(uint32_t dtUs) {
 // 入队：队列满时丢最旧的一条，保证"最新指令一定生效"
 static bool enqueueCommand(const HandCommand& cmd) {
   if (cmdQueue == nullptr) return false;
+
+  UBaseType_t depth = uxQueueMessagesWaiting(cmdQueue);
+  if (depth > qDepthMax) qDepthMax = depth;
+
   if (xQueueSend(cmdQueue, &cmd, 0) == pdTRUE) return true;
+
+  // 队列已满：扔掉最旧的一条，再放新的进去
   HandCommand dropped;
   xQueueReceive(cmdQueue, &dropped, 0);
+  qDrop++;
   return xQueueSend(cmdQueue, &cmd, 0) == pdTRUE;
 }
 
@@ -297,6 +321,25 @@ class MyCallbacks : public BLECharacteristicCallbacks {
     String cmd = String(value.c_str());
     cmd.trim();
     if (cmd.length() == 0) return;
+
+#if TEST_ENABLE
+    // 测试指令：不进队列，只唤醒测试任务
+    if (cmd.startsWith("test=")) {
+      String which = cmd.substring(5);
+      which.trim();
+      uint8_t id = 0;
+      if      (which == "flood")  id = 1;
+      else if (which == "stream") id = 2;
+      else if (which == "estop")  id = 3;
+      else {
+        Serial.println("[TEST] unknown. use test=flood | test=stream | test=estop");
+        return;
+      }
+      if (testReqQ != nullptr) xQueueSend(testReqQ, &id, 0);
+      Serial.printf("[TEST] %s requested\n", which.c_str());
+      return;
+    }
+#endif
 
     HandCommand c = {};
     c.type = CMD_GESTURE;
@@ -347,6 +390,12 @@ class MyServerCallbacks : public BLEServerCallbacks {
     HandCommand home = {};
     home.type = CMD_HOME;
     enqueueCommand(home);       // 断连回张开位，机械手不会僵在半紧状态
+
+    // 断连保护计时起点：从这里到"五根手指全部静止"用了多久
+    settleRefUs = micros();
+    settleSeenMoving = true;   // 断连会下发 HOME，一定会有动作（除非本来就是张开位）
+    settleKind = SETTLE_DISC;
+
     Serial.println("[BLE] 上位机已断开");
   }
 };
@@ -394,10 +443,14 @@ static void motionTask(void* pvParameters) {
     // 2) 推进 5 根手指的插值（内部决定要不要写 I2C）
     hand.run();
 
-    // 3) 标记脚收尾：本拍处理了新指令，就结束这次计时
-    if (hadCmd && markPending) {
-      MARK_LOW();
-      markPending = false;
+    // 3) 标记脚收尾 + 延迟统计
+    //    统计不看 markPending：测试任务灌进来的指令也要计入延迟样本，
+    //    否则 test=stream 的负载延迟就测不到。标记脚只是给示波器看的信号。
+    if (hadCmd) {
+      if (markPending) {
+        MARK_LOW();
+        markPending = false;
+      }
 #if RTOS_DEBUG
       uint32_t dt = (uint32_t)(micros() - firstRx);
       latRecord(dt);
@@ -405,7 +458,22 @@ static void motionTask(void* pvParameters) {
 #endif
     }
 
-    // 4) 固定节拍：vTaskDelayUntil 比 vTaskDelay 更准，不会累积漂移
+    // 4) 沉降检测：先看到"在动"，再等到"全部静止"，两条都满足才打印
+    //    只用 nowStill 判定会在测试刚开始、还没动起来时误触发。
+    bool nowStill = hand.isStill();
+    if (settleKind != SETTLE_NONE) {
+      if (!nowStill) {
+        settleSeenMoving = true;
+      } else if (settleSeenMoving) {
+        uint32_t ms = (uint32_t)((micros() - settleRefUs) / 1000);
+        const char* tag = (settleKind == SETTLE_DISC) ? "ESTOP" : "SETTLE";
+        Serial.printf("[%s] all fingers still after %lu ms\n", tag, (unsigned long)ms);
+        settleKind = SETTLE_NONE;
+        settleSeenMoving = false;
+      }
+    }
+
+    // 5) 固定节拍：vTaskDelayUntil 比 vTaskDelay 更准，不会累积漂移
     vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(MOTION_PERIOD_MS));
 
 #if RTOS_DEBUG
@@ -417,6 +485,90 @@ static void motionTask(void* pvParameters) {
 #else
     (void)tick;
 #endif
+  }
+}
+
+// ========================================================================
+//  五点五、D2 实验：由固件自己产生指令流
+// ------------------------------------------------------------------------
+//  为什么不让上位机连着发？
+//    上位机的发送节奏会被 BLE 连接间隔打散（见 docs/measure.md 的相位分析），
+//    而这三个实验要看的是"队列 + 任务调度"的行为，指令源越干净越好。
+//    注意这条路径绕过了 BLE 协议栈，所以延迟口径与 D1 一致（都从指令产生时刻算）。
+// ========================================================================
+static void latReset() {
+  latN = 0; latMin = 0xFFFFFFFFu; latMax = 0; latSum = 0;
+}
+
+static void pushAngle(uint8_t finger, uint8_t angle) {
+  HandCommand c = {};
+  c.type   = CMD_ANGLE;
+  c.finger = finger;
+  c.angle  = angle;
+  c.tRx    = micros();
+  enqueueCommand(c);
+}
+
+static void pushGesture(const char* name) {
+  HandCommand c = {};
+  c.type = CMD_GESTURE;
+  strncpy(c.gesture, name, sizeof(c.gesture) - 1);
+  c.tRx = micros();
+  enqueueCommand(c);
+}
+
+static void testTask(void* pvParameters) {
+  (void)pvParameters;
+  uint8_t id = 0;
+
+  for (;;) {
+    if (xQueueReceive(testReqQ, &id, portMAX_DELAY) != pdTRUE) continue;
+
+    // 每个实验开始前清空，避免上一次的残留影响结论
+    xQueueReset(cmdQueue);
+    latReset();
+    qDrop = 0;
+    qDepthMax = 0;
+
+    if (id == 1) {
+      // ---- flood：几百微秒内灌进 100 条，队列只有 8 深 ----
+      Serial.println("[TEST] flood start: 100 cmds as fast as possible");
+      settleRefUs = micros();
+      settleSeenMoving = false;
+      settleKind = SETTLE_FLOOD;
+
+      uint32_t t0 = micros();
+      for (int i = 0; i < 100; i++) {
+        pushAngle(1, (uint8_t)(i * 180 / 99));
+      }
+      uint32_t dt = micros() - t0;
+      Serial.printf("[TEST] flood: sent=100 in %lu us, dropped=%lu, max_depth=%lu\n",
+                    (unsigned long)dt, (unsigned long)qDrop, (unsigned long)qDepthMax);
+      Serial.println("[TEST] policy=drop-oldest, 最终目标应等于第 100 条 = 180 deg");
+    } else if (id == 2) {
+      // ---- stream：20Hz 连续给目标，模拟上位机拖动滑块 ----
+      Serial.println("[TEST] stream start: 20Hz x 60 (3s), target ramps 30->148");
+      settleRefUs = micros();
+      settleSeenMoving = false;
+      settleKind = SETTLE_STREAM;
+
+      for (int i = 0; i < 60; i++) {
+        if (!bleConnected) { Serial.println("[TEST] aborted: BLE lost"); break; }
+        pushAngle(1, (uint8_t)(30 + i * 2));
+        vTaskDelay(pdMS_TO_TICKS(50));
+      }
+      Serial.printf("[TEST] stream done: dropped=%lu, max_depth=%lu\n",
+                    (unsigned long)qDrop, (unsigned long)qDepthMax);
+    } else if (id == 3) {
+      // ---- estop：持续扫动，等你手动断开蓝牙 ----
+      Serial.println("[TEST] estop start: sweeping. 现在手动断开上位机");
+      int k = 0;
+      while (bleConnected) {
+        pushGesture((k++ % 2) ? "fist" : "five");
+        vTaskDelay(pdMS_TO_TICKS(200));
+      }
+      Serial.println("[TEST] estop: BLE lost, waiting for settle ...");
+    }
   }
 }
 
@@ -469,6 +621,16 @@ void setup() {
     Serial.printf("motion task started, period=%dms, stack=%d bytes\n",
                   MOTION_PERIOD_MS, MOTION_STACK);
   }
+
+#if TEST_ENABLE
+  testReqQ = xQueueCreate(1, sizeof(uint8_t));
+  if (testReqQ == nullptr ||
+      xTaskCreate(testTask, "test", 4096, nullptr, 2, nullptr) != pdPASS) {
+    Serial.println("WARN: test task create failed, D2 experiments disabled");
+  } else {
+    Serial.println("test task ready: send test=flood | test=stream | test=estop");
+  }
+#endif
 
   BLEDevice::init("xiaochu");
   BLEServer* pServer = BLEDevice::createServer();
