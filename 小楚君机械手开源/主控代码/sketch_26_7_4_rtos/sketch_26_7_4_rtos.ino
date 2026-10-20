@@ -42,6 +42,14 @@ Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver(PCA9685_ADDR);
 
 #define SERVO_FREQ 50         // 50Hz
 
+// ---------- 延迟测量标记脚（D1）----------
+// 接逻辑分析仪 / 示波器的 CH1：收到 BLE 指令时拉高，写完 PWM 后拉低，
+// 高电平宽度就是「板内处理延迟」（不含无线传输和舵机机械响应）。
+// 若该脚在你的板子上另有用途，可换成 3 / 5 / 6 / 7 / 10 中任一空闲脚。
+#define MARK_PIN 4
+#define MARK_HIGH() digitalWrite(MARK_PIN, HIGH)
+#define MARK_LOW()  digitalWrite(MARK_PIN, LOW)
+
 // ---------- BLE UUID（与上位机一致）----------
 #define SERVICE_UUID           "89d60870-9908-4472-8f8c-e5b3e6573cd1"
 #define WRITE_CHAR_UUID        "39dea685-a63e-44b2-8819-9a202581f8fe"
@@ -242,12 +250,32 @@ struct HandCommand {
   uint8_t finger;
   uint8_t angle;
   char    gesture[16];
+  uint32_t tRx;     // 收到指令的时刻（micros），跟着指令走，避免多条积压时串味
 };
 
 static QueueHandle_t cmdQueue = nullptr;
 static Hand hand;                          // 只由 motionTask 修改，因此不需要互斥锁
 static volatile bool bleConnected = false;
 static volatile bool needRestartAdv = false;
+static volatile bool markPending = false;  // 标记脚是否正等待本次指令执行完
+
+// ---------- 延迟统计（D1）----------
+// 单次测量没有意义：指令落在 10ms 节拍窗口的位置是随机的，
+// 真正的指标是分布范围（jitter）而不是平均值。
+static uint32_t latN = 0, latMin = 0xFFFFFFFFu, latMax = 0, latSum = 0;
+static void latRecord(uint32_t dtUs) {
+  if (dtUs < latMin) latMin = dtUs;
+  if (dtUs > latMax) latMax = dtUs;
+  latSum += dtUs;
+  latN++;
+  if (latN % 20 == 0) {      // 每 20 条汇总一次
+    Serial.printf("[LAT-STAT] n=%lu  min=%lu  max=%lu  avg=%lu us\n",
+                  (unsigned long)latN,
+                  (unsigned long)latMin,
+                  (unsigned long)latMax,
+                  (unsigned long)(latSum / latN));
+  }
+}
 
 // 入队：队列满时丢最旧的一条，保证"最新指令一定生效"
 static bool enqueueCommand(const HandCommand& cmd) {
@@ -291,10 +319,16 @@ class MyCallbacks : public BLECharacteristicCallbacks {
       c.gesture[sizeof(c.gesture) - 1] = '\0';
     }
 
+    c.tRx = micros();          // 解析完成，此刻开始计时（必须写在入队之前）
+
     if (!enqueueCommand(c)) {
       Serial.println("[QUEUE] enqueue failed");
       return;
     }
+
+    markPending = true;
+    MARK_HIGH();               // 标记脚拉高：延迟测量的起点
+
 #if RTOS_DEBUG
     Serial.printf("[BLE] queued type=%d, free heap=%u\n", c.type, (unsigned)ESP.getFreeHeap());
 #endif
@@ -349,14 +383,29 @@ static void motionTask(void* pvParameters) {
   for (;;) {
     // 1) 非阻塞取指令：这一拍没有新指令也要继续推进插值
     HandCommand cmd;
+    uint32_t firstRx = 0;        // 本拍第一条指令的接收时刻（取最坏值）
+    bool hadCmd = false;
     while (xQueueReceive(cmdQueue, &cmd, 0) == pdTRUE) {
+      if (!hadCmd) firstRx = cmd.tRx;
+      hadCmd = true;
       applyCommand(cmd);          // 一次清空队列，避免积压导致动作延迟
     }
 
     // 2) 推进 5 根手指的插值（内部决定要不要写 I2C）
     hand.run();
 
-    // 3) 固定节拍：vTaskDelayUntil 比 vTaskDelay 更准，不会累积漂移
+    // 3) 标记脚收尾：本拍处理了新指令，就结束这次计时
+    if (hadCmd && markPending) {
+      MARK_LOW();
+      markPending = false;
+#if RTOS_DEBUG
+      uint32_t dt = (uint32_t)(micros() - firstRx);
+      latRecord(dt);
+      Serial.printf("[LATENCY] board-side = %lu us\n", (unsigned long)dt);
+#endif
+    }
+
+    // 4) 固定节拍：vTaskDelayUntil 比 vTaskDelay 更准，不会累积漂移
     vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(MOTION_PERIOD_MS));
 
 #if RTOS_DEBUG
@@ -378,6 +427,10 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
   Serial.println("\n=== xiaochu FreeRTOS Version ===");
+
+  // 标记脚：默认低电平，等待第一条 BLE 指令
+  pinMode(MARK_PIN, OUTPUT);
+  digitalWrite(MARK_PIN, LOW);
 
   Wire.begin(SDA_PIN, SCL_PIN);
   pwm.begin();
