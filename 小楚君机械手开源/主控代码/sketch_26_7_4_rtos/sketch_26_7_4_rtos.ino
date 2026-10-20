@@ -294,6 +294,7 @@ static volatile bool markPending = false;  // 标记脚是否正等待本次指�
 //   test=estop   持续扫动，由人手断开蓝牙，测断连→静止的耗时
 //   test=proto   协议解析自测（D3），16 条用例
 //   test=i2c     人为拉低 SDA 制造总线卡死，验证恢复函数（D4）
+//   test=scan    扫描 0x08~0x77，确认器件到底在不在总线上（D4 排障用）
 #define TEST_ENABLE 1
 static QueueHandle_t testReqQ = nullptr;
 
@@ -509,8 +510,9 @@ class MyCallbacks : public BLECharacteristicCallbacks {
       else if (which == "estop")  id = 3;
       else if (which == "proto")  id = 4;
       else if (which == "i2c")    id = 5;
+      else if (which == "scan")   id = 6;
       else {
-        Serial.println("[TEST] unknown. use test=flood|stream|estop|proto|i2c");
+        Serial.println("[TEST] unknown. use test=flood|stream|estop|proto|i2c|scan");
         return;
       }
       if (testReqQ != nullptr) xQueueSend(testReqQ, &id, 0);
@@ -608,11 +610,42 @@ static volatile uint32_t i2cErrCount     = 0;
 static volatile uint32_t i2cRecoverCount = 0;
 static volatile uint8_t  i2cTestReq      = 0;
 
+// 启动时那次探测的结果，决定"自动恢复"该不该开。
+// 开机就没有 ACK，说明是接线/供电问题（器件根本不在总线上）；
+// 这种状态下你去打 9 个时钟、重开外设，是治不了"没插线"的，只会白折腾。
+static bool    i2cPresentAtBoot = true;
+static bool    i2cAutoRecover   = true;
+static uint8_t i2cFailStreak    = 0;      // 连续失败次数，攒够 3 次才动手恢复
+
 // 探测：向 PCA9685 地址发一个空传输，只为了看有没有 ACK
 // 返回值就是 Wire 的错误码：0=正常，2=地址 NACK，3=数据 NACK，4=其他（总线忙/仲裁丢失）
 static uint8_t i2cProbe() {
   Wire.beginTransmission(PCA9685_ADDR);
   return Wire.endTransmission();
+}
+
+// 扫描 0x08~0x77，把总线上所有应答的地址打出来。
+// 用途：分清两种"探测失败"——
+//   ① 器件根本不在（没插线 / 没供电 / 地址不对）→ 一个地址都扫不到
+//   ② 器件在，但总线被某根线拉住           → 同样扫不到，但松开后立刻能扫到
+// 这是排查 I2C 的第一步，比盯着错误码猜有用得多。
+static void i2cScan() {
+  uint8_t found = 0;
+  for (uint8_t a = 0x08; a <= 0x77; a++) {
+    Wire.beginTransmission(a);
+    if (Wire.endTransmission() == 0) {
+      Serial.printf("[I2C-SCAN] found 0x%02X%s\n", a,
+                    (a == PCA9685_ADDR) ? "  <- PCA9685 期望地址" : "");
+      found++;
+    }
+  }
+  if (found == 0) {
+    Serial.println("[I2C-SCAN] 总线上没有任何器件应答");
+    Serial.println("[I2C-SCAN] 检查：SDA=GPIO8 / SCL=GPIO9 是否插反或松动；"
+                   "PCA9685 的 VCC 是否接了 3.3V；GND 是否共地");
+  } else {
+    Serial.printf("[I2C-SCAN] 共 %u 个器件\n", found);
+  }
 }
 
 // 恢复：抢回引脚 → 打 9 个时钟 → 补 STOP → 交还给 I2C 外设
@@ -629,7 +662,11 @@ static void i2cBusRecover() {
     delayMicroseconds(5);
   }
 
-  // STOP 条件：SCL 保持高，SDA 由低变高
+  // STOP 条件必须"SCL 为低时把 SDA 拉低，再把 SCL 抬高，最后放开 SDA"。
+  // 若在 SCL 已经是高的时候把 SDA 拉低，产生的其实是 START —— 顺序反了
+  // 会先插一个 START 再补 STOP，看起来也能收场，但语义是错的。
+  digitalWrite(SCL_PIN, LOW);
+  delayMicroseconds(5);
   pinMode(SDA_PIN, OUTPUT);
   digitalWrite(SDA_PIN, LOW);
   delayMicroseconds(5);
@@ -646,9 +683,10 @@ static void i2cBusRecover() {
 }
 
 // 总线恢复后，PCA9685 的寄存器内容仍在（芯片没有掉电），但为保险起见
-// 重新配一次频率，并把五个通道的当前角度重写一遍
+// 重新配一次频率，并把五个通道的当前角度重写一遍。
+// 这里刻意不调 pwm.begin()：它内部会再调一次 Wire.begin()（不带引脚），
+// 可能把刚设好的引脚配置覆盖掉，反而制造新问题。
 static void i2cReinitDevice() {
-  pwm.begin();
   pwm.setOscillatorFrequency(27000000);
   pwm.setPWMFreq(SERVO_FREQ);
   hand.forceWriteAll();
@@ -661,6 +699,15 @@ static void runI2cTest() {
   uint8_t rc0 = i2cProbe();
   Serial.printf("[I2C-TEST] 1) baseline probe: rc=%u %s\n",
                 rc0, rc0 ? "FAIL" : "ok");
+
+  // 基线就不通时，注入故障毫无意义：事后你分不清"恢复失败"和"本来就不通"。
+  // 这种情况先扫一遍总线，把问题定位到"器件不在"还是"总线被咬住"。
+  if (rc0 != 0) {
+    Serial.println("[I2C-TEST] 基线不通 → 跳过注入，先确认器件是否在线");
+    i2cScan();
+    Serial.println("[I2C-TEST] 若扫描无应答：检查接线/供电，不是恢复函数的问题");
+    return;
+  }
 
   // 把 SDA 拽到低电平不放 —— 模拟"某个从机咬住总线"
   pinMode(SDA_PIN, OUTPUT);
@@ -721,28 +768,52 @@ static void motionTask(void* pvParameters) {
   uint32_t lastHealthMs = 0;
 
   for (;;) {
-    // 0) 总线健康检查（D4）：每 5 秒探一次，挂了就在本任务里就地恢复
+    // 0) 总线健康检查（D4）：每 5 秒探一次
+    //    ★ 单次 NACK 不动手恢复：I2C 偶发一次 NACK 很正常，一失败就 reinit
+    //      反而会把正在输出的 PWM 打断。连续 3 次（15 秒）都不通，才认为真的挂了。
+    //    ★ 开机就没应答（i2cPresentAtBoot=false）时完全不做自动恢复：
+    //      那是接线/供电问题，打 9 个时钟治不了没插的线。
     if (i2cTestReq) {
+      uint8_t req = i2cTestReq;
       i2cTestReq = 0;
-      runI2cTest();
+      if (req == 2) {
+        i2cScan();
+      } else {
+        runI2cTest();
+      }
       lastHealthMs = millis();        // 刚测过，别紧接着又探
+      i2cFailStreak = 0;
     } else if (millis() - lastHealthMs >= I2C_HEALTH_MS) {
       lastHealthMs = millis();
       uint8_t rc = i2cProbe();
-      if (rc != 0) {
+      if (rc == 0) {
+        i2cFailStreak = 0;
+      } else {
         i2cErrCount++;
-        Serial.printf("[I2C] probe failed rc=%u, recovering ...\n", rc);
-        uint32_t t0 = micros();
-        i2cBusRecover();
-        uint32_t dt = micros() - t0;
-        uint8_t rc2 = i2cProbe();
-        if (rc2 == 0) {               // 只有真的通了才重配器件
-          i2cRecoverCount++;
-          i2cReinitDevice();
+        if (i2cFailStreak < 255) i2cFailStreak++;
+        Serial.printf("[I2C] probe failed rc=%u (连续 %u 次)\n", rc, i2cFailStreak);
+
+        if (!i2cPresentAtBoot) {
+          if (i2cFailStreak == 1) {
+            Serial.println("[I2C] 开机就没有 ACK，判定为接线/供电问题，自动恢复已禁用");
+          }
+        } else if (i2cAutoRecover && i2cFailStreak >= 3) {
+          uint32_t t0 = micros();
+          i2cBusRecover();
+          uint32_t dt = micros() - t0;
+          uint8_t rc2 = i2cProbe();
+          if (rc2 == 0) {               // 只有真的通了才重配器件
+            i2cRecoverCount++;
+            i2cFailStreak = 0;
+            i2cReinitDevice();
+          } else if (i2cRecoverCount == 0 && i2cErrCount >= 6) {
+            i2cAutoRecover = false;     // 连救几次都救不回来，别再反复折腾总线
+            Serial.println("[I2C] 多次恢复无效 → 停止自动恢复，请断电检查接线");
+          }
+          Serial.printf("[I2C] recover %s in %lu us (rc_after=%u) err=%lu ok=%lu\n",
+                        rc2 ? "FAILED" : "ok", (unsigned long)dt, rc2,
+                        (unsigned long)i2cErrCount, (unsigned long)i2cRecoverCount);
         }
-        Serial.printf("[I2C] recover %s in %lu us (rc_after=%u) err=%lu ok=%lu\n",
-                      rc2 ? "FAILED" : "ok", (unsigned long)dt, rc2,
-                      (unsigned long)i2cErrCount, (unsigned long)i2cRecoverCount);
       }
     }
 
@@ -969,6 +1040,10 @@ static void testTask(void* pvParameters) {
       // 本任务不能直接碰 I2C：全工程的规矩是只有 motionTask 用总线。
       i2cTestReq = 1;
       Serial.println("[TEST] i2c request handed to motion task");
+    } else if (id == 6) {
+      // ---- scan：扫描总线，确认器件到底在不在 ----
+      i2cTestReq = 2;
+      Serial.println("[TEST] scan request handed to motion task");
     }
   }
 }
@@ -991,11 +1066,15 @@ void setup() {
   pwm.setPWMFreq(SERVO_FREQ);
   delay(10);
 
-  Wire.beginTransmission(PCA9685_ADDR);
-  if (Wire.endTransmission() == 0) {
+  uint8_t bootRc = i2cProbe();
+  i2cPresentAtBoot = (bootRc == 0);
+  if (i2cPresentAtBoot) {
     Serial.printf("PCA9685 found at 0x%02X\n", PCA9685_ADDR);
   } else {
-    Serial.println("ERROR: PCA9685 not found! 蓝牙仍会启动，请检查 SDA/SCL/共地/地址跳线");
+    Serial.printf("ERROR: PCA9685 not found (rc=%u)！舵机会完全不动\n", bootRc);
+    Serial.println("  开机就没有 ACK = 接线/供电问题，不是总线卡死：");
+    i2cScan();
+    i2cAutoRecover = false;   // 打 9 个时钟治不了没插的线，别每 5 秒折腾一次
   }
 
   // 初始归零（张开），此时任务还没起来，独占 I2C 是安全的
@@ -1029,7 +1108,7 @@ void setup() {
       xTaskCreate(testTask, "test", 4096, nullptr, 2, nullptr) != pdPASS) {
     Serial.println("WARN: test task create failed, D2 experiments disabled");
   } else {
-    Serial.println("test task ready: test=flood | stream | estop | proto | i2c");
+    Serial.println("test task ready: test=flood | stream | estop | proto | i2c | scan");
   }
 #endif
 
