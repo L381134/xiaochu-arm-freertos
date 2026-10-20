@@ -154,6 +154,14 @@ public:
 
   bool isStill() { return fabsf(currentPosition - target) <= step; }
   void setStep(float s) { step = s; }
+
+  // 无条件写一次当前角度。用于总线恢复后重建输出：
+  // run() 只在"位置变化"时才写，恢复时位置没变，所以它什么都不会做。
+  void forceWrite() {
+    int angle = (int)(currentPosition + 0.5f);
+    int pulse = map(angle, 0, 180, SERVO_MIN_PULSE, SERVO_MAX_PULSE);
+    pwm.setPWM(channel, 0, pulse);
+  }
 };
 
 class Hand {
@@ -179,6 +187,7 @@ public:
 
   bool isStill() { for (int i=0;i<5;i++) if (!fingers[i]->isStill()) return false; return true; }
   void setStep(float s) { for (int i=0;i<5;i++) fingers[i]->setStep(s); }
+  void forceWriteAll() { for (int i=0;i<5;i++) fingers[i]->forceWrite(); }
 };
 
 // ========================================================================
@@ -283,6 +292,8 @@ static volatile bool markPending = false;  // 标记脚是否正等待本次指�
 //   test=flood   瞬间灌 100 条，验证"丢旧保新"
 //   test=stream  20Hz 连发 3 秒，测负载下的延迟与跟手性
 //   test=estop   持续扫动，由人手断开蓝牙，测断连→静止的耗时
+//   test=proto   协议解析自测（D3），16 条用例
+//   test=i2c     人为拉低 SDA 制造总线卡死，验证恢复函数（D4）
 #define TEST_ENABLE 1
 static QueueHandle_t testReqQ = nullptr;
 
@@ -497,8 +508,9 @@ class MyCallbacks : public BLECharacteristicCallbacks {
       else if (which == "stream") id = 2;
       else if (which == "estop")  id = 3;
       else if (which == "proto")  id = 4;
+      else if (which == "i2c")    id = 5;
       else {
-        Serial.println("[TEST] unknown. use test=flood | test=stream | test=estop | test=proto");
+        Serial.println("[TEST] unknown. use test=flood|stream|estop|proto|i2c");
         return;
       }
       if (testReqQ != nullptr) xQueueSend(testReqQ, &id, 0);
@@ -568,6 +580,117 @@ class MyServerCallbacks : public BLEServerCallbacks {
 };
 
 // ========================================================================
+//  四点五、I2C 总线健康检查与卡死恢复（D4）
+// ------------------------------------------------------------------------
+//  什么是总线卡死：
+//    I2C 的 SDA 是开漏、多设备共享。若主机在从机"正在吐一位数据"时复位/掉电，
+//    从机会一直把 SDA 拉低等待下一个时钟 —— 之后所有传输都得到 NACK，
+//    除了断电重启没有别的办法。工业现场非常常见，消费电子里也偶发。
+//
+//  为什么 9 个时钟能解开：
+//    从机卡住时最多只剩一个字节（8 位）没发完，加 1 位 ACK 共 9 位。
+//    主机手动打 9 个 SCL 脉冲，从机就把剩下的位移出去、释放 SDA，
+//    再补一个 STOP 条件，总线回到空闲态。
+//
+//  为什么这段必须放在 motionTask 里跑：
+//    全工程的规矩是"只有 motionTask 碰 I2C"。恢复过程要重配引脚、重开外设，
+//    如果允许别的任务插进来，等于把唯一的总线使用者变成了两个。
+//
+//  ⚠ 诚实说明：本项目的从机 PCA9685 是只写器件，只有在 ACK 位才拉低 SDA，
+//    所以它"自然发生"卡死的概率比 MPU6050 这类可读器件低得多。这里的测试是
+//    人为把 SDA 拉低来制造故障，验证的是恢复函数本身有效，不代表这个故障
+//    在 PCA9685 上高频出现。
+// ========================================================================
+#define I2C_CLOCK_HZ     100000
+#define I2C_HEALTH_MS    5000     // 每 5 秒探一次总线
+
+static volatile uint32_t i2cErrCount     = 0;
+static volatile uint32_t i2cRecoverCount = 0;
+static volatile uint8_t  i2cTestReq      = 0;
+
+// 探测：向 PCA9685 地址发一个空传输，只为了看有没有 ACK
+// 返回值就是 Wire 的错误码：0=正常，2=地址 NACK，3=数据 NACK，4=其他（总线忙/仲裁丢失）
+static uint8_t i2cProbe() {
+  Wire.beginTransmission(PCA9685_ADDR);
+  return Wire.endTransmission();
+}
+
+// 恢复：抢回引脚 → 打 9 个时钟 → 补 STOP → 交还给 I2C 外设
+static void i2cBusRecover() {
+  pinMode(SDA_PIN, INPUT_PULLUP);      // 释放 SDA，让从机能把它拉高
+  pinMode(SCL_PIN, OUTPUT);
+  digitalWrite(SCL_PIN, HIGH);
+  delayMicroseconds(10);
+
+  for (int i = 0; i < 9; i++) {        // 9 个时钟把从机剩下的位挤出来
+    digitalWrite(SCL_PIN, LOW);
+    delayMicroseconds(5);
+    digitalWrite(SCL_PIN, HIGH);
+    delayMicroseconds(5);
+  }
+
+  // STOP 条件：SCL 保持高，SDA 由低变高
+  pinMode(SDA_PIN, OUTPUT);
+  digitalWrite(SDA_PIN, LOW);
+  delayMicroseconds(5);
+  digitalWrite(SCL_PIN, HIGH);
+  delayMicroseconds(5);
+  digitalWrite(SDA_PIN, HIGH);
+  delayMicroseconds(5);
+
+  // 交还给 I2C 外设，重新初始化
+  pinMode(SDA_PIN, INPUT_PULLUP);
+  Wire.end();
+  Wire.begin(SDA_PIN, SCL_PIN);
+  Wire.setClock(I2C_CLOCK_HZ);
+}
+
+// 总线恢复后，PCA9685 的寄存器内容仍在（芯片没有掉电），但为保险起见
+// 重新配一次频率，并把五个通道的当前角度重写一遍
+static void i2cReinitDevice() {
+  pwm.begin();
+  pwm.setOscillatorFrequency(27000000);
+  pwm.setPWMFreq(SERVO_FREQ);
+  hand.forceWriteAll();
+}
+
+// 人为制造故障 → 确认故障 → 恢复 → 确认恢复
+static void runI2cTest() {
+  Serial.println("[I2C-TEST] start");
+
+  uint8_t rc0 = i2cProbe();
+  Serial.printf("[I2C-TEST] 1) baseline probe: rc=%u %s\n",
+                rc0, rc0 ? "FAIL" : "ok");
+
+  // 把 SDA 拽到低电平不放 —— 模拟"某个从机咬住总线"
+  pinMode(SDA_PIN, OUTPUT);
+  digitalWrite(SDA_PIN, LOW);
+  delayMicroseconds(100);
+
+  uint8_t rc1 = i2cProbe();
+  Serial.printf("[I2C-TEST] 2) SDA held low, probe: rc=%u %s\n",
+                rc1, rc1 ? "bus broken (expected)" : "UNEXPECTED: 仍能通信");
+
+  uint32_t t0 = micros();
+  i2cBusRecover();
+  uint32_t dt = micros() - t0;
+
+  uint8_t rc2 = i2cProbe();
+  Serial.printf("[I2C-TEST] 3) recovered in %lu us, probe: rc=%u %s\n",
+                (unsigned long)dt, rc2, rc2 ? "FAIL" : "ok");
+  if (rc2 == 0) {
+    i2cReinitDevice();
+    Serial.println("[I2C-TEST] pwm re-init + 5 channels rewritten");
+  }
+
+  if (rc1 != 0 && rc2 == 0) {
+    Serial.println("[I2C-TEST] PASS: 故障被制造出来，并被恢复函数修好");
+  } else {
+    Serial.println("[I2C-TEST] FAIL/INCONCLUSIVE: 看上面三行的 rc");
+  }
+}
+
+// ========================================================================
 //  五、运动任务：整个工程唯一调用 pwm.setPWM() 的地方
 // ========================================================================
 static void applyCommand(const HandCommand& c) {
@@ -595,8 +718,34 @@ static void motionTask(void* pvParameters) {
   (void)pvParameters;
   TickType_t lastWake = xTaskGetTickCount();
   uint32_t tick = 0;
+  uint32_t lastHealthMs = 0;
 
   for (;;) {
+    // 0) 总线健康检查（D4）：每 5 秒探一次，挂了就在本任务里就地恢复
+    if (i2cTestReq) {
+      i2cTestReq = 0;
+      runI2cTest();
+      lastHealthMs = millis();        // 刚测过，别紧接着又探
+    } else if (millis() - lastHealthMs >= I2C_HEALTH_MS) {
+      lastHealthMs = millis();
+      uint8_t rc = i2cProbe();
+      if (rc != 0) {
+        i2cErrCount++;
+        Serial.printf("[I2C] probe failed rc=%u, recovering ...\n", rc);
+        uint32_t t0 = micros();
+        i2cBusRecover();
+        uint32_t dt = micros() - t0;
+        uint8_t rc2 = i2cProbe();
+        if (rc2 == 0) {               // 只有真的通了才重配器件
+          i2cRecoverCount++;
+          i2cReinitDevice();
+        }
+        Serial.printf("[I2C] recover %s in %lu us (rc_after=%u) err=%lu ok=%lu\n",
+                      rc2 ? "FAILED" : "ok", (unsigned long)dt, rc2,
+                      (unsigned long)i2cErrCount, (unsigned long)i2cRecoverCount);
+      }
+    }
+
     // 1) 非阻塞取指令：这一拍没有新指令也要继续推进插值
     HandCommand cmd;
     uint32_t firstRx = 0;        // 本拍第一条指令的接收时刻（取最坏值）
@@ -815,6 +964,11 @@ static void testTask(void* pvParameters) {
     } else if (id == 4) {
       // ---- proto：协议解析自测，不碰硬件 ----
       runProtoTest();
+    } else if (id == 5) {
+      // ---- i2c：总线卡死与恢复。只交个旗子，由 motionTask 执行 ----
+      // 本任务不能直接碰 I2C：全工程的规矩是只有 motionTask 用总线。
+      i2cTestReq = 1;
+      Serial.println("[TEST] i2c request handed to motion task");
     }
   }
 }
@@ -875,7 +1029,7 @@ void setup() {
       xTaskCreate(testTask, "test", 4096, nullptr, 2, nullptr) != pdPASS) {
     Serial.println("WARN: test task create failed, D2 experiments disabled");
   } else {
-    Serial.println("test task ready: send test=flood | test=stream | test=estop");
+    Serial.println("test task ready: test=flood | stream | estop | proto | i2c");
   }
 #endif
 
