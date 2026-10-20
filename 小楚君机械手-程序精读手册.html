@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="3v6UL3Yc2HftLZwDLzA2hF">
+<head data-page-node-id="TnfsMyux2HQqL6DRvN2Csg">
+<meta charset="UTF-8" data-page-node-id="TTrK4cOOPaY6ZN7MUe0EbD">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="w3RAKKlKRtvGKSBwRHigsF">
+<title>小楚君机械手 · 程序精读手册（零基础版）</title>
+<style>
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    font-size: 15px;
+    line-height: 1.75;
+    color: #2C2C2A;
+    background: #FAFAF8;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: "Cascadia Mono", "JetBrains Mono", Consolas, "Courier New", monospace; }
+
+  /* ---------- 布局 ---------- */
+  .wrap { display: flex; max-width: 1240px; margin: 0 auto; gap: 32px; padding: 0 28px; }
+  aside {
+    width: 236px; flex-shrink: 0;
+    position: sticky; top: 0; align-self: flex-start;
+    max-height: 100vh; overflow-y: auto;
+    padding: 34px 0 40px;
+  }
+  main { flex: 1; min-width: 0; padding: 34px 0 96px; }
+
+  /* ---------- 头部 ---------- */
+  header {
+    border-bottom: 1px solid #E5E3DC;
+    padding-bottom: 26px; margin-bottom: 34px;
+  }
+  header .tag {
+    display: inline-block; font-size: 12px; letter-spacing: .08em;
+    color: #185FA5; background: #E6F1FB;
+    padding: 3px 10px; border-radius: 99px; margin-bottom: 14px;
+  }
+  h1 { font-size: 27px; font-weight: 500; margin: 0 0 10px; letter-spacing: -.01em; }
+  header p { margin: 0; color: #6B6A65; font-size: 14px; }
+  header .meta { margin-top: 14px; font-size: 13px; color: #888780; }
+
+  /* ---------- 侧栏目录 ---------- */
+  aside h4 {
+    font-size: 11px; font-weight: 500; letter-spacing: .1em;
+    color: #A5A399; margin: 0 0 12px; text-transform: uppercase;
+  }
+  aside a {
+    display: block; padding: 5px 0 5px 12px; font-size: 13.5px;
+    color: #5F5E5A; text-decoration: none;
+    border-left: 2px solid #E5E3DC; transition: .15s;
+  }
+  aside a:hover { color: #185FA5; border-left-color: #85B7EB; background: #F3F7FC; }
+  aside a.sub { font-size: 12.5px; padding-left: 24px; color: #888780; }
+
+  /* ---------- 章节 ---------- */
+  section { margin-bottom: 56px; scroll-margin-top: 20px; }
+  h2 {
+    font-size: 20px; font-weight: 500; margin: 0 0 8px;
+    display: flex; align-items: center; gap: 10px; letter-spacing: -.01em;
+  }
+  h2 .num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border-radius: 7px;
+    background: #E6F1FB; color: #185FA5;
+    font-size: 13px; font-weight: 500; flex-shrink: 0;
+  }
+  h3 { font-size: 16px; font-weight: 500; margin: 32px 0 10px; color: #1F1F1E; }
+  h4 { font-size: 14.5px; font-weight: 500; margin: 22px 0 8px; color: #3C3C3A; }
+  p { margin: 0 0 14px; }
+  .lead { color: #5F5E5A; margin-bottom: 22px; }
+
+  /* ---------- 代码 ---------- */
+  pre {
+    background: #FFFFFF; border: 1px solid #E5E3DC; border-radius: 10px;
+    padding: 16px 18px; overflow-x: auto; margin: 0 0 16px;
+    font-family: "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+    font-size: 13px; line-height: 1.7; color: #2C2C2A;
+  }
+  code {
+    font-family: "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+    font-size: .88em; background: #F1EFE8; color: #993C1D;
+    padding: 2px 6px; border-radius: 4px;
+  }
+  pre code { background: none; color: inherit; padding: 0; font-size: 13px; }
+  .k { color: #993556; }      /* 关键字 */
+  .f { color: #185FA5; }      /* 函数名 */
+  .n { color: #BA7517; }      /* 数字 */
+  .c { color: #A5A399; font-style: italic; }  /* 注释 */
+  .s { color: #3B6D11; }      /* 字符串 */
+
+  /* ---------- 表格 ---------- */
+  table {
+    width: 100%; border-collapse: collapse; margin: 0 0 18px; font-size: 14px;
+    background: #FFF; border-radius: 10px; overflow: hidden;
+    border: 1px solid #E5E3DC;
+  }
+  th {
+    background: #F7F6F2; text-align: left; font-weight: 500;
+    padding: 10px 14px; border-bottom: 1px solid #E5E3DC; color: #3C3C3A;
+  }
+  td { padding: 10px 14px; border-bottom: 1px solid #F1EFE8; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+
+  /* ---------- 卡片 / 提示 ---------- */
+  .note, .warn, .tip {
+    border-radius: 10px; padding: 14px 18px; margin: 0 0 18px;
+    font-size: 14.5px; border-left: 3px solid;
+  }
+  .note { background: #E6F1FB; border-color: #378ADD; }
+  .warn { background: #FAEEDA; border-color: #EF9F27; }
+  .tip  { background: #EAF3DE; border-color: #639922; }
+  .note b, .warn b, .tip b { font-weight: 500; }
+  .note .lbl, .warn .lbl, .tip .lbl {
+    display: block; font-size: 11.5px; letter-spacing: .08em;
+    margin-bottom: 4px; opacity: .75;
+  }
+
+  /* ---------- 逐行对照 ---------- */
+  .pair { display: grid; grid-template-columns: 1fr; gap: 0; margin-bottom: 18px; }
+  .pair pre { margin: 0; border-radius: 10px 10px 0 0; border-bottom: none; }
+  .pair .say {
+    background: #F7F6F2; border: 1px solid #E5E3DC; border-top: 2px dashed #DDD9CE;
+    border-radius: 0 0 10px 10px; padding: 12px 18px; font-size: 14px; color: #4A4A46;
+  }
+  .pair .say b { font-weight: 500; color: #2C2C2A; }
+
+  /* ---------- 手势表 ---------- */
+  .fingers { display: flex; gap: 3px; }
+  .dot {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border-radius: 6px;
+    font-size: 11px; font-weight: 500;
+  }
+  .open { background: #EAF3DE; color: #3B6D11; }
+  .closed { background: #F5C4B3; color: #993C1D; }
+  .fx { font-size: 11px; color: #A5A399; letter-spacing: .3em; }
+
+  /* ---------- 概念卡 ---------- */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-bottom: 20px; }
+  .card {
+    background: #FFF; border: 1px solid #E5E3DC; border-radius: 10px; padding: 16px 18px;
+  }
+  .card h5 { margin: 0 0 6px; font-size: 14.5px; font-weight: 500; color: #185FA5; }
+  .card p { margin: 0; font-size: 13.5px; color: #5F5E5A; line-height: 1.65; }
+
+  /* ---------- 流程条 ---------- */
+  .steps { counter-reset: s; margin: 0 0 20px; padding: 0; list-style: none; }
+  .steps li {
+    counter-increment: s; position: relative; padding: 0 0 18px 40px;
+    border-left: 1px dashed #DDD9CE; margin-left: 12px;
+  }
+  .steps li:last-child { border-left-color: transparent; padding-bottom: 0; }
+  .steps li::before {
+    content: counter(s); position: absolute; left: -13px; top: 0;
+    width: 25px; height: 25px; border-radius: 50%;
+    background: #E6F1FB; color: #185FA5;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 500;
+  }
+  .steps li b { display: block; font-weight: 500; margin-bottom: 2px; }
+  .steps li span { font-size: 14px; color: #5F5E5A; }
+
+  footer {
+    border-top: 1px solid #E5E3DC; padding-top: 22px;
+    font-size: 13px; color: #888780;
+  }
+
+  @media (max-width: 900px) {
+    aside { display: none; }
+    .wrap { padding: 0 18px; }
+  }
+</style>
+</head>
+<body data-page-node-id="PMIf7FZDZdd9bFF5ulvbDT">
+<div class="wrap" data-page-node-id="E5C7ti3QvEvGFW2LyyLi1y">
+
+<aside data-page-node-id="H7lJfPMfWYVO2jdbAX1uwr">
+  <h4 data-page-node-id="NHl9jUglh8BDEQ91QmEbWo">目录</h4>
+  <a href="#s0" data-page-node-id="E7hLIb2GRpDIk42HiDXjNI">先说结论</a>
+  <a href="#s1" data-page-node-id="HiffEBvN2saJoJu6j6M7hz">1 · 整体印象</a>
+  <a href="#s2" data-page-node-id="J1WsX1SQhIDFCkw4XMPTtj">2 · 读代码的顺序</a>
+  <a href="#s3" data-page-node-id="YBlAYZL3PXE3c3GxmgcUUf">3 · 五个必备概念</a>
+  <a href="#s4" data-page-node-id="wmsyyrRSSigwxvJ3FrGy8V">4 · 逐段精读</a>
+  <a href="#s4-1" class="sub" data-page-node-id="csyRGCFaO4MQLm5sVjDaP3">4.1 引入工具库</a>
+  <a href="#s4-2" class="sub" data-page-node-id="ZgNyVn5Us5ePVmr3W84015">4.2 起外号（#define）</a>
+  <a href="#s4-3" class="sub" data-page-node-id="3OsYdJxRR2DzFf7fz0WDDB">4.3 Finger 一根手指</a>
+  <a href="#s4-4" class="sub" data-page-node-id="qTST6D0KpXa2jPxlaPJKFB">4.4 Hand 一整只手</a>
+  <a href="#s4-5" class="sub" data-page-node-id="0BCY0s1bunWJzamqnfMnCp">4.5 手势菜单</a>
+  <a href="#s4-6" class="sub" data-page-node-id="F1GawEkydKLYqjGVg33AaJ">4.6 蓝牙收信员</a>
+  <a href="#s4-7" class="sub" data-page-node-id="XvlpF0qwdycBGPw7wXOGQC">4.7 setup 开机</a>
+  <a href="#s4-8" class="sub" data-page-node-id="LFGxJB9I3lCu7S8uh4OGnb">4.8 loop 循环</a>
+  <a href="#s5" data-page-node-id="iD9widLjWSUaRMh16vSZib">5 · 三个核心机制</a>
+  <a href="#s6" data-page-node-id="oXwHoFVWvlYA9xEzAZsJZD">6 · 手势对照表</a>
+  <a href="#s7" data-page-node-id="dBiDe6g0fnKZkt1QRsBrTR">7 · 动手改一改</a>
+  <a href="#s8" data-page-node-id="YOOfGBqjKoEr0L5j7G7EUu">8 · 排错清单</a>
+</aside>
+
+<main data-page-node-id="1cWExFoSjRQngFOyMXeQlX">
+
+<header data-page-node-id="CG0zlFRgspFnTF7oh9Qao3">
+  <div class="tag" data-page-node-id="e5BtE6gGPDcZVPoA0ryWrp">零基础 · 程序精读</div>
+  <h1 data-page-node-id="gqilspsyadn73651cbu4kb">小楚君机械手 · 程序精读手册</h1>
+  <p data-page-node-id="ciQcaf4zMVANCLBhVnthPf">把 <span class="mono" data-page-node-id="pLuzYTthmkfGrW9M0nGQwd">sketch_26_7_4.ino</span> 这 269 行代码，拆成你能看懂的小块。</p>
+  <div class="meta" data-page-node-id="W2RLUcCloUJMrkJcsazRaj">ESP32-C3 + PCA9685 + 5×SG90 舵机 · 蓝牙 BLE 控制 · 共 269 行</div>
+</header>
+
+<!-- ================= 0 ================= -->
+<section id="s0" data-page-node-id="GGljLFDAMyAKwNo95eosg7">
+  <h2 data-page-node-id="zB3qgKc7tf0s9s33q8fQ8l"><span class="num" data-page-node-id="SYUGWKbMsTbwqrBxnPKsol">0</span>先说结论</h2>
+  <p data-page-node-id="IreiXplkROaVbLjM5lhH7N">这份程序从头到尾只做三件事，你只要记住这三句话，整份代码就通了：</p>
+  <div class="cards" data-page-node-id="7MYPTZDbGhxxGSkDqIBCqb">
+    <div class="card" data-page-node-id="TVWvImm0LbKtCCvRCVtzgn">
+      <h5 data-page-node-id="3SnEb4C551bqZVW3oULu4r">① 收指令</h5>
+      <p data-page-node-id="N4GJIaTi5aQs0ZkBfFvGB3">手机 App 通过蓝牙发来一串文字，程序把它读进来、看懂。</p>
+    </div>
+    <div class="card" data-page-node-id="Qh28ESbP7d3zmr2ePSMvBf">
+      <h5 data-page-node-id="hc2IZN3un2fxsuI29mtEDK">② 算目标</h5>
+      <p data-page-node-id="F0iR1L45togzJx7aN7WOB3">根据这串文字，算出 5 根手指各自"最终应该转到多少度"。</p>
+    </div>
+    <div class="card" data-page-node-id="Jm86aEX6dAGXIsJQ5DC835">
+      <h5 data-page-node-id="pN0OGPWnSZbyREHsbHwjnu">③ 慢慢动</h5>
+      <p data-page-node-id="FahTQ2pDKMKOANRnGIIEqh">每 10 毫秒让手指朝目标挪一小步，直到走到为止。</p>
+    </div>
+  </div>
+  <div class="note" data-page-node-id="2gfaCy8skiInrN4AMR7XZy">
+    <span class="lbl" data-page-node-id="812yhIBtUw8y0TVxNj1YhO">注意</span>
+    <b data-page-node-id="GgcxY2PygvZi2LLgPrbJHR">代码不是按从上到下的顺序执行的。</b>上电后，程序先执行 <code data-page-node-id="yeJDuHTxPJaUH3l8ICsoFe">setup()</code>（只跑一次），然后永远在 <code data-page-node-id="yx39xjr0zXLtwdm6nF695G">loop()</code> 里循环。中间那一大堆 <code data-page-node-id="kRzEOEDjVXdb9KUMRCCfhP">class</code> 段落，只是"定义图纸"，本身不会动。
+  </div>
+</section>
+
+<!-- ================= 1 ================= -->
+<section id="s1" data-page-node-id="EfTYwATkLNukMGBVofUgWQ">
+  <h2 data-page-node-id="uYJRLCzRK8KGiHZgnOktCf"><span class="num" data-page-node-id="7eX3gTSol4435YLFfGjHNG">1</span>整体印象：信号是怎么一路传到手指的</h2>
+  <p class="lead" data-page-node-id="DbZuUnQcLWUDaX1Y02Hzo9">整条链路有五站。代码负责中间那两站。</p>
+
+  <pre data-page-node-id="6btkyC0avSHoiItsn9MJE1"><code data-page-node-id="rlaMyh3rzqsI7YTQd4blcB">手机 App  ──蓝牙BLE──▶  ESP32-C3 主控  ──I2C──▶  PCA9685 驱动板  ──PWM──▶  5 个舵机  ──▶  手指
+XiaochuHand.exe          （这份程序）        GPIO8/9        地址 0x40          通道 0~4</code></pre>
+
+  <table data-page-node-id="MmTBGWhFuSKJXJ9H80rQJf">
+    <tr data-page-node-id="o0GL4eP1YgHvtRazYCxkq0"><th style="width:150px" data-page-node-id="FaUFu8WZjwYGZRMmcxnCUb">环节</th><th data-page-node-id="ObgW5A5fx3HJRHUiXzqshT">做什么</th><th style="width:180px" data-page-node-id="cGqkyDGVeLD9iwE6ISBEnL">代码里对应</th></tr>
+    <tr data-page-node-id="pGwucTgmls635fkAlaORdy"><td data-page-node-id="BvtNurCKNLLTGfH9ESsUd8">手机 App</td><td data-page-node-id="wUxtgFnbU78WphelAeD1Mx">把"握拳"或"1 号手指 90°"变成一串文字发出去</td><td class="mono" data-page-node-id="SzqCiI2GgilY0NfRlYBfCH">——</td></tr>
+    <tr data-page-node-id="CJICVkFpNcMCfuGhF36FgL"><td data-page-node-id="gAgphg1gFuTtXMmotwCQ1X">蓝牙 BLE</td><td data-page-node-id="m58kxeGMiHbCwzABJAn0zj">无线把这串文字送给 ESP32</td><td class="mono" data-page-node-id="a5o6EdIHrgHvaSnOB0Q0X4">MyCallbacks</td></tr>
+    <tr data-page-node-id="FJDmfROFQKHJIofI3SocDx"><td data-page-node-id="GDzf265sHZCqoHDr338D8n">ESP32-C3</td><td data-page-node-id="wbxVqbVC1mJdS9QeT0L9H0">看懂文字，算出 5 个目标角度</td><td class="mono" data-page-node-id="ppSVHKRqtj1gdlq7KCdb0E">Finger / Hand</td></tr>
+    <tr data-page-node-id="2klUtFggGvkmLdYNllCR8b"><td data-page-node-id="YKhqDZLHfGL1k15mYqFOpA">I2C 总线</td><td data-page-node-id="jx3VdR8cEBuEvnTm0JpcLG">ESP32 用两根线把"角度"告诉驱动板</td><td class="mono" data-page-node-id="C61IWB3FRJedNkr2h3cGGl">Wire.begin(8,9)</td></tr>
+    <tr data-page-node-id="SHcNbPpMIa8r3jiyDBu1Bz"><td data-page-node-id="sFUbl16Enf2CbYjqoZXYN8">PCA9685</td><td data-page-node-id="OkTPFTiexgja2QWk9P8Osj">把角度翻译成脉宽，输出 PWM 信号</td><td class="mono" data-page-node-id="J80doL2HNMJM0CA0b6gIjl">pwm.setPWM()</td></tr>
+    <tr data-page-node-id="j8JQgDNriDnOXS1rYbcelG"><td data-page-node-id="zSDqJHNFh2WclAyhsAIqV8">SG90 舵机</td><td data-page-node-id="W4ATnBmQepMusqpB54dGK4">按脉宽转动，带动手指</td><td class="mono" data-page-node-id="vsiiQDYaogfO7lpOqPln68">——</td></tr>
+  </table>
+
+  <div class="tip" data-page-node-id="atvkpIEUPGJnqivNLx87H1">
+    <span class="lbl" data-page-node-id="WayTYnjzpDm3GPlEVaxykQ">为什么中间要加一块 PCA9685？</span>
+    ESP32 自己也能输出 PWM，但它的引脚数量有限、精度不够，同时带 5 个舵机容易抖动。PCA9685 是一块"16 路 PWM 放大器"，主控只要说一句"3 号通道转到 90°"，它就自己完成所有时序细节，省心又稳定。
+  </div>
+</section>
+
+<!-- ================= 2 ================= -->
+<section id="s2" data-page-node-id="NV4ceqvTjyqFJCi1DueJOe">
+  <h2 data-page-node-id="2fDyGEmgYheww5zv12WwxI"><span class="num" data-page-node-id="rrOHgHlVs7NfsJCAUZt8Ai">2</span>读代码的正确顺序</h2>
+  <p class="lead" data-page-node-id="50VF9aMWVj2cm9nV6dqQs1">新手最容易犯的错，是从第 1 行开始硬读。那样读到第 50 行就会迷路。请按下面这个顺序：</p>
+  <ol class="steps" data-page-node-id="z5Lvo9BLNIkrHNlVFKObMU">
+    <li data-page-node-id="yXblciOJla0H9nLnmv38EG"><b data-page-node-id="GeM7bGRMSByLlSbVIEmHQ8">先看 setup()（第 218 行）</b><span data-page-node-id="A3AV0pdCIqenlwU4GCw5K5">这是开机流程，能看到所有硬件是怎么被"唤醒"的。它是全文最好懂的一段。</span></li>
+    <li data-page-node-id="XfTISApe1aTDqaE0Ub7Ibf"><b data-page-node-id="oqn91a1HnESfkJyV7GrEcQ">再看 loop()（第 267 行）</b><span data-page-node-id="TaWaJmI0WJU84fXbDEHGUc">只有两行。看完你会发现：核心动作就是一句 <code data-page-node-id="t5h8cLGbguAnfwSoZKEp2h">hand.run()</code>。</span></li>
+    <li data-page-node-id="8zubR1JEbF6YHA5tJoZ64w"><b data-page-node-id="M2ADVXFQxZEqn10nUDu8KE">然后看 MyCallbacks（第 189 行）</b><span data-page-node-id="AFkchtfRazbNfu6iYbe1tY">这是"入口"，蓝牙来的数据从这里进来。顺着它找下去，就能找到所有分支。</span></li>
+    <li data-page-node-id="GcWlFmMugSJWqFDTU6hBNs"><b data-page-node-id="SvPtwJ8P6GOHt7jHNmeCMW">最后回头看 class Finger / Hand</b><span data-page-node-id="9j6HcLFKx4Lja6erLBY7zk">此时你已经知道它们"被谁调用、什么时候被调用"，再看定义就不会悬空。</span></li>
+  </ol>
+  <div class="note" data-page-node-id="RFYt08eeF8gcF84Spv9jrV">
+    <span class="lbl" data-page-node-id="v8r0eO5CEXs7vjziWjmnFQ">一句话记住</span>
+    <b data-page-node-id="ZmHrexsTzI4QjcubyITXcL">setup 是开机清单，loop 是心跳，Finger 和 Hand 是工具箱，MyCallbacks 是入口。</b>
+  </div>
+</section>
+
+<!-- ================= 3 ================= -->
+<section id="s3" data-page-node-id="GsmNXe4ElEFX5TgnTifBse">
+  <h2 data-page-node-id="pkBkMEBdGGqrowFBtsTOER"><span class="num" data-page-node-id="C9HigFuACiyO59DDnMNr3B">3</span>五个必备概念（看懂这五个就够用了）</h2>
+
+  <h3 data-page-node-id="7SFKlUKb7ubW3dUEJVTCnJ">① #define —— 给数字起外号</h3>
+  <pre data-page-node-id="pMxCMujR48eTxokSaIFASC"><code data-page-node-id="EAclHrs3RVByXFfimHe5Jm"><span class="k" data-page-node-id="hDNR7uDsbE8LQ5dVlJEsZW">#define</span> SDA_PIN <span class="n" data-page-node-id="BwttgtqnmcaJQ7m8n1nqV1">8</span></code></pre>
+  <p data-page-node-id="oPKr8yXuVLHjc1FY5eD893">意思是"以后代码里写 SDA_PIN，就等于写 8"。这样做的价值是：以后要换引脚，只改这一行，全文自动跟着改。</p>
+
+  <h3 data-page-node-id="XeI5gXLLBEX79JUSaZlxVo">② 变量 —— 会变的盒子</h3>
+  <pre data-page-node-id="tEWCujRdkEk5rXqSZWF5mn"><code data-page-node-id="kdImzfS9vCtHsB9fW355EN"><span class="k" data-page-node-id="CXDTSsT8SXCkFs4f2tnQQY">float</span> currentPosition;   <span class="c" data-page-node-id="dW9w0j2AYCmMWDBVGWvJro">// 小数盒子，装"当前角度"</span>
+<span class="k" data-page-node-id="TAy5qfull7mejqQIzHUBvO">int</span>   channel;           <span class="c" data-page-node-id="NiV2DmCJnulr9fEvLF9uaI">// 整数盒子，装"通道号"</span>
+<span class="k" data-page-node-id="QXrmN15USXaFrrcCFEuWLh">bool</span>  isStill;           <span class="c" data-page-node-id="BLxxD2CAjVTWp4hNsl6OCb">// 真假盒子，只能是 true / false</span></code></pre>
+
+  <h3 data-page-node-id="t2dNgG0CSarQ7VgIiMNXfh">③ 函数 —— 打包好的一串动作</h3>
+  <pre data-page-node-id="VUYrxWALn5c4ZPNs1oYivl"><code data-page-node-id="ne5fXw3nEm8Trgr8n5SJBW"><span class="k" data-page-node-id="2r8PafFWABttxO5nLFkc8x">void</span> <span class="f" data-page-node-id="UVewCqAx0ullIMwcHMyLo1">run</span>() {
+  <span class="c" data-page-node-id="yOIFyP3rzqbs1EaMYwVnt8">// 里面的代码就是"这串动作"</span>
+}</code></pre>
+  <p data-page-node-id="ZYQfbYQ67qyCVC2jukNi3E"><code data-page-node-id="wcEsyL61NONJojS5FYTGkJ">void</code> 表示"不需要返回结果"。括号里如果写着东西（比如 <code data-page-node-id="5B8kDNKrvScS5sMAWvMFiX">int angle</code>），那就是"做这件事需要你告诉我一个数"。</p>
+
+  <h3 data-page-node-id="Ryg90CqNyAq4i63vV0ZYyE">④ 类与对象 —— 图纸与实物</h3>
+  <pre data-page-node-id="Vr6WYjhwvBY4J7BDVJUfoa"><code data-page-node-id="5dqE9bPePUqqQLoieG11LM"><span class="k" data-page-node-id="Pa84ZIHBFenzAeIG9BMDsF">class</span> <span class="f" data-page-node-id="4tQ56OGB9j3vGRN66X0EEg">Finger</span> { ... };     <span class="c" data-page-node-id="L4XCGaRjJH4A0EIB6meeNd">// 图纸：描述"一根手指"长什么样</span>
+Finger f1(...);              <span class="c" data-page-node-id="aL9SzVywxrFsvnY3s4zeP8">// 实物：按图纸造出一个具体的手指</span></code></pre>
+  <p data-page-node-id="BExS9Yc5tHXhkTANsiAEjU">本程序里只有一张图纸 <code data-page-node-id="KDfBidF500rlkHDuqP8G0Y">Finger</code>，却造出了 5 个实物（5 根手指）。<code data-page-node-id="0DE6CKPHvm545ztHtMryRs">Hand</code> 是"管理这 5 个实物"的班长。</p>
+
+  <h3 data-page-node-id="D5eri1Oo5MYEUTBKfKzXG9">⑤ 判断与循环 —— 程序的"岔路"和"重复"</h3>
+  <pre data-page-node-id="pBLCq7lwzNXyDGJbxc9TEY"><code data-page-node-id="2sCImDD4hYbep9EbIesbRA"><span class="k" data-page-node-id="JaLm9leyiNHuXOSord9TKk">if</span> (条件) { ... } <span class="k" data-page-node-id="p7YwI8TFa70ZcbMQ4Bcmqr">else</span> { ... }        <span class="c" data-page-node-id="a7dkIoi8Pgyp6MGp5WHnpE">// 岔路：满足条件走 A，否则走 B</span>
+<span class="k" data-page-node-id="8NOC5m4G1yM2VfKMUIsGoA">for</span> (<span class="k" data-page-node-id="5ZfY1ZhUTDxQOoM7mYn8mY">int</span> i=<span class="n" data-page-node-id="BOiiAQaTFKoJ6bcGTuiT1K">0</span>; i&lt;<span class="n" data-page-node-id="icSOQsHxwWVdHTsAYX8PBb">5</span>; i++) { ... }     <span class="c" data-page-node-id="q61XiR9fWM0g0rO4bCsTZt">// 重复：i 从 0 数到 4，执行 5 次</span></code></pre>
+  <div class="tip" data-page-node-id="10ywSlI8skpBEwCzRAEBXR">
+    <span class="lbl" data-page-node-id="0ijmmzutrznRTyejtXZBaY">小技巧</span>
+    <code data-page-node-id="AM8xVkuEdA4sYOxsMOKGjJ">for (int i=0; i&lt;5; i++)</code> 在这份代码里出现很多次，它每次都只有一个意思：<b data-page-node-id="C4MkB7S0LR9e16FFlBCweS">"对 5 根手指，每根都做一遍"</b>。
+  </div>
+</section>
+
+<!-- ================= 4 ================= -->
+<section id="s4" data-page-node-id="1uIBeYRlyUuY0RgoQPOQoU">
+  <h2 data-page-node-id="OoqwZLB22itIWr4w2wTOFL"><span class="num" data-page-node-id="Etbvz9MKfI0XHhCFl0klkJ">4</span>逐段精读</h2>
+  <p class="lead" data-page-node-id="zxTiTZXcB7FoAd9Rxpzzox">下面按代码里原本的分段（作者写的那一行行 <span class="mono" data-page-node-id="nentNRZnNNcfOBBbBSbi91">// ---------- 标题 ----------</span>）逐个讲。</p>
+
+  <h3 id="s4-1" data-page-node-id="hn8TjClnJHst6Z42OSciNj">4.1 引入工具库（第 6~11 行）</h3>
+  <pre data-page-node-id="s6NRLNk76g31KFYhQfgvXM"><code data-page-node-id="cVAi6BElfCaCZFMTyHJ2Im"><span class="k" data-page-node-id="u9An7ORqyzeukOKYuNMN0B">#include</span> <span class="s" data-page-node-id="OKUQPhJW73ZJkfIZOGh8ej">&lt;BLEDevice.h&gt;</span>                  <span class="c" data-page-node-id="nFbv5J8IWVE5smEwOnHW0l">// 蓝牙基础功能</span>
+<span class="k" data-page-node-id="rVDGfBc32YNGpMX5YYTN6N">#include</span> <span class="s" data-page-node-id="BYP38TQZ97AYYf4yo8RW0k">&lt;BLEUtils.h&gt;</span>                   <span class="c" data-page-node-id="92E8tuCdIz2oSFFheuSjW2">// 蓝牙小工具</span>
+<span class="k" data-page-node-id="AezbzqlJ5EB12GUF2K9Ho0">#include</span> <span class="s" data-page-node-id="yU3jBAb0bPdZPi4N2jattt">&lt;BLEServer.h&gt;</span>                  <span class="c" data-page-node-id="vVEk83v2DPjM2aoWiAsKMP">// 让 ESP32 变成蓝牙"服务器"</span>
+<span class="k" data-page-node-id="BZMoRzio1YR6EcRBtntir6">#include</span> <span class="s" data-page-node-id="eD1SR75UllbJTVxHfCQ5Nf">&lt;BLE2902.h&gt;</span>                    <span class="c" data-page-node-id="hEsr2wJRGZVhQEqtwwEYhf">// 蓝牙描述符，给手机 App 用</span>
+<span class="k" data-page-node-id="abbW70aKNN8b0WuY3L3chM">#include</span> <span class="s" data-page-node-id="KIaiMMkEtDOzyG2ivyRJXQ">&lt;Wire.h&gt;</span>                       <span class="c" data-page-node-id="BFnyxMpBeZ6vXZN6wH11vS">// I2C 两线通信</span>
+<span class="k" data-page-node-id="riu91tHpJs7PCYMNUi6m79">#include</span> <span class="s" data-page-node-id="rsMo9cS4zh1NFmBwn6rDzR">&lt;Adafruit_PWMServoDriver.h&gt;</span>    <span class="c" data-page-node-id="fTA7RJfhfNdLdYGF54MTAw">// PCA9685 驱动板专用库</span></code></pre>
+  <div class="pair" data-page-node-id="cMdZitPAGzxgGLqbLCkyi9">
+    <div class="say" data-page-node-id="FoIUA7QCLPrzmgEbVZG58h"><b data-page-node-id="W7TnmXGD0OOlwfEpP4aaYZ">怎么理解：</b>做饭前先把锅碗瓢盆从柜子里拿出来。<code data-page-node-id="6pljXsIezLdaiPm4MclJnP">#include</code> 就是"把别人写好的功能借过来用"。这几个库不是 Arduino 自带的，需要先在库里搜索安装。</div>
+  </div>
+
+  <h3 id="s4-2" data-page-node-id="BKtY9wKW5sFr1QZdDTcD6J">4.2 起外号：引脚、频率、编号（第 13~49 行）</h3>
+  <pre data-page-node-id="1UXUb1J5GCtGFjNn4hYDc6"><code data-page-node-id="ljCKdCmmKpaP8oiH4jsDf0"><span class="k" data-page-node-id="MIxQJS0ZS1NduQIMcIaweG">#define</span> SDA_PIN <span class="n" data-page-node-id="EN38v0qyCBECNOYA0bu4z0">8</span>       <span class="c" data-page-node-id="lM6EnmrnvxlHzBGzCHsjDl">// 数据线接 GPIO8</span>
+<span class="k" data-page-node-id="dp2364ueV8UwkDJ3Jwrfhm">#define</span> SCL_PIN <span class="n" data-page-node-id="DTWFdOV1S1pgFpVcYV3Yn1">9</span>       <span class="c" data-page-node-id="iLrFvZCW6YpB8pnkLmszKW">// 时钟线接 GPIO9</span>
+
+Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver(<span class="n" data-page-node-id="AelA7Se8GqEXNBZqCRfIVs">0x40</span>);
+                          <span class="c" data-page-node-id="lQVaSkzK3qbqfHix8N9Rne">// 0x40 是驱动板的 I2C"门牌号"</span>
+
+<span class="k" data-page-node-id="08Vw6gtInFE3lDSYFeJWCE">#define</span> SERVO_MIN_PULSE <span class="n" data-page-node-id="tltUVq3xiAQxtOMklII4P1">150</span>   <span class="c" data-page-node-id="xsJ1VWyT13EPlUicK1XF0b">// 对应 0°</span>
+<span class="k" data-page-node-id="bqcGGZoeQCuXaGpcefad1J">#define</span> SERVO_MAX_PULSE <span class="n" data-page-node-id="FUmpbBR9M0ulxZ0VSC83BG">500</span>   <span class="c" data-page-node-id="LMtWU7Jx6DrRsodCKlrNdS">// 对应 180°</span>
+<span class="k" data-page-node-id="FInh8C3Pt8rrWK0UbDMcVn">#define</span> SERVO_FREQ <span class="n" data-page-node-id="rQOJDoMAH7aVj0TPCTcoXD">50</span>         <span class="c" data-page-node-id="faFLhxO4HrUeTWYhPpv5Dd">// 50Hz，舵机行业标准</span>
+
+<span class="k" data-page-node-id="xjO7cznmahNpguOabXlGRt">#define</span> SERVICE_UUID    <span class="s" data-page-node-id="OuGQSLjL2fDUsV3IkfitvV">"89d60870-9908-..."</span>  <span class="c" data-page-node-id="F4iHzJ4SNJsAAqpQ4UR3Bm">// 服务编号</span>
+<span class="k" data-page-node-id="2NHX5cMUQbe64da4Np7Pu6">#define</span> WRITE_CHAR_UUID <span class="s" data-page-node-id="qZhhetCnmgP8PyBTkL9D6U">"39dea685-a63e-..."</span>  <span class="c" data-page-node-id="2APntj0TQlfnJHX3gfZsQk">// 可写特征编号</span></code></pre>
+  <div class="warn" data-page-node-id="Vh2uYBi9rURsHuc1rlNAPs">
+    <span class="lbl" data-page-node-id="OuDKEVCCYGqKekFUAB2IBM">重点</span>
+    <b data-page-node-id="cxDJbHLcgwU3LGw9jANoAO">UUID 必须和上位机 App 里写的完全一致</b>，差一个字符，手机就搜不到设备或者连上后发不出数据。这是新手最常踩的坑。
+  </div>
+
+  <h4 data-page-node-id="TCwiVRNaAuuVlAcE4hQltH">手指编号与两端角度</h4>
+  <pre data-page-node-id="xF8VyDxvZhh9zrFIZUncxV"><code data-page-node-id="B08qeoTEWE5hkh1AfEZCLP"><span class="k" data-page-node-id="e6NHvzOIq5G2usFHFY2VtX">#define</span> FINGER_THUMB  <span class="n" data-page-node-id="qRzuIPzpKl1tjk9pRQiSQK">0</span>   <span class="c" data-page-node-id="z8a2rj9GOgzgsnKM3G3nOU">// 拇指 = 0</span>
+<span class="k" data-page-node-id="JYrwKx3hQpVsYUK5DvL65C">#define</span> FINGER_INDEX  <span class="n" data-page-node-id="lv4tVFLWlqr2LR0WE1qj7A">1</span>   <span class="c" data-page-node-id="fxJL04TpZlQqjKNMLuHu4d">// 食指 = 1</span>
+<span class="k" data-page-node-id="EDdhXY5d2ACnATb6RAx1st">#define</span> FINGER_MIDDLE <span class="n" data-page-node-id="KHPmOi4jC7CLSAAkqXjC4M">2</span>   <span class="c" data-page-node-id="z1fJm0b63RLOrH1TlIRzzr">// 中指 = 2</span>
+<span class="k" data-page-node-id="7vAfo0G1AsS6TSrKylUJVA">#define</span> FINGER_RING   <span class="n" data-page-node-id="YLq86KYHTn27v4VgjicVrw">3</span>   <span class="c" data-page-node-id="b47nlAAFtyuvOubYYvwWCa">// 无名指 = 3</span>
+<span class="k" data-page-node-id="fcKfiLCqAO88Ky5tZzpBJK">#define</span> FINGER_PINKY  <span class="n" data-page-node-id="BHUnX0cuqXCrGipNy5QM8T">4</span>   <span class="c" data-page-node-id="jetqy05eY7mO95Hac0oFo1">// 小指 = 4</span>
+
+<span class="k" data-page-node-id="xkqBfZiwx6AoA5iAujUDvt">#define</span> THUMB_MAX_OPEN   <span class="n" data-page-node-id="e2wFihS3wqoUGRKGnAHMYP">30</span>    <span class="c" data-page-node-id="TU3hP0W6CZLk79e96RPr2F">// 拇指：张开 30°</span>
+<span class="k" data-page-node-id="SPCsX1yOgVlslN5uTBWhXy">#define</span> THUMB_MAX_CLOSED <span class="n" data-page-node-id="GsS8seaorErDOvUByQHI2i">180</span>   <span class="c" data-page-node-id="akWThAbmVYCAdYFfvEgO5F">// 拇指：握紧 180°</span>
+<span class="k" data-page-node-id="CcfIFF2QbzMPwGSPBp9ZE0">#define</span> MIDDLE_MAX_OPEN  <span class="n" data-page-node-id="i6tiyswRaN3vw3HwvAstN9">180</span>   <span class="c" data-page-node-id="aHR9uIx3Q9M8sBhD8OEjGH">// 中指：张开 180° ← 反过来了</span>
+<span class="k" data-page-node-id="c86uMEj1Djq057d6POveWy">#define</span> MIDDLE_MAX_CLOSED <span class="n" data-page-node-id="LPrCIDKbVyEGDrLjB8ILtK">0</span>    <span class="c" data-page-node-id="WfwEUxDoWYaS7d5gOzXTHP">// 中指：握紧 0°</span></code></pre>
+  <div class="pair" data-page-node-id="5R6UqImgrtXi2MDtcdqEFS">
+    <div class="say" data-page-node-id="6BnRfldQ62mvGfvyJJFnWD"><b data-page-node-id="TQOCKGMLvq5vYKTwLPGArE">为什么数字是反的？</b>因为 5 个舵机装到机械结构上时，安装方向不一样。有的"转到 0°"是张开，有的"转到 180°"才是张开。<br data-page-node-id="tebjp7fBhOFaNG9oS6GVTu">
+    作者没有在代码里到处写 <code data-page-node-id="fqx3Y2JZ3INF519oes2obZ">if</code> 判断，而是把每根手指的两个端点做成数据写在这里，后面统一处理 —— <b data-page-node-id="UyeNxRG7JBqi2mvf9s8Z1e">这是很值得学的写法</b>。</div>
+  </div>
+  <pre data-page-node-id="9pBPHCwztunSVjaLFmh8fW"><code data-page-node-id="Co3FQ9p1F6XwiytjzaqFfQ"><span class="k" data-page-node-id="6urpoWBhBnEg0eOylFh4dG">#define</span> DEFAULT_STEP <span class="n" data-page-node-id="DITsFvdrQbCRM7GZLd230L">2.0f</span>   <span class="c" data-page-node-id="E58KAotWDhKhDv57xsEESw">// 每小步走 2°</span></code></pre>
+  <p data-page-node-id="GWxWJyJAJYjhdThLykptAh"><b data-page-node-id="QMr4kC2X3rGWwwSTKah4EZ">这个是"速度旋钮"。</b>数字越大动得越快，越小越柔和。作者原本用 1.0，注释掉改成 2.0 并在后面写了"速度翻倍"。</p>
+
+  <h3 id="s4-3" data-page-node-id="7fVeIljjSSPgEbTnOeaPGl">4.3 Finger 类 —— 一根手指（第 51~92 行）</h3>
+  <p data-page-node-id="fnXYbDy3ZjAbs8veMHqHJV">这是全文最核心的 40 行。它管三件事：<b data-page-node-id="VNYsUtkN14emcL3u3bVJ9Z">记住目标、慢慢靠近、换算成信号发出去。</b></p>
+
+  <h4 data-page-node-id="iEkDzUzSiyAF6YGGPDuKQC">属性（资料卡）</h4>
+  <pre data-page-node-id="vitxAGQOkY7ND93CV9alpB"><code data-page-node-id="8cfQO3AsXCuBfER3PPp31h"><span class="k" data-page-node-id="AH6dMmMt7AA8ooj45RsD1d">int</span> channel;              <span class="c" data-page-node-id="gwKwBh6gxEPYB4rTlMBXTV">// 接在驱动板哪个通道 0~15</span>
+<span class="k" data-page-node-id="Dnq0RAdhyymWtdEP1tkEXg">int</span> maxOpen, maxClosed;   <span class="c" data-page-node-id="AIfGwkaAwX2Q9C6mlQUyTU">// 张开角度、握紧角度</span>
+<span class="k" data-page-node-id="L2S8j4gpYfysFy0UByARn5">int</span> direction;            <span class="c" data-page-node-id="Pt8g0KYRtSU5SsOGLSeGiy">// 1 = 正常，-1 = 反装</span>
+<span class="k" data-page-node-id="ulvPyituvbhM1g7jdshEAl">float</span> currentPosition;    <span class="c" data-page-node-id="Iu4scUb5ipWHDDP12soXZ4">// 【当前】实际在哪</span>
+<span class="k" data-page-node-id="2NbjyFpEl1VbF2wxn4VQvt">float</span> target;             <span class="c" data-page-node-id="JFTlehsWR0yARWoTaldQEH">// 【目标】想去哪里</span>
+<span class="k" data-page-node-id="cfoPaLJk85qn62wrDA3Lrq">float</span> step;               <span class="c" data-page-node-id="KtRdI4N14S8D9GfBF2Rrd1">// 每小步走多少度</span></code></pre>
+  <div class="note" data-page-node-id="dy6KwzYAJRFrlKxRhHCNma">
+    <span class="lbl" data-page-node-id="yUkUGKgpd1OwUhjQnM8ZCB">关键理解</span>
+    <b data-page-node-id="H4XnIE5Imbg7VymmSMdRbs">currentPosition 和 target 是两个不同的东西。</b>指令只会改 <code data-page-node-id="OyKDckEqlOPBOwXBWovq08">target</code>，永远不会直接改 <code data-page-node-id="ECeNLBZLk2aGQerPbYdL16">currentPosition</code>。正因为这样分开，手指才能"慢慢"过去，而不是瞬间跳过去。
+  </div>
+
+  <h4 data-page-node-id="KM4eewUt1hEHSqn2b4NW53">构造函数 —— 造手指时自动执行</h4>
+  <pre data-page-node-id="u8GB7bVD7uecVvPvh8cGix"><code data-page-node-id="wQ2IK9LeUu8FBOByk0Jim7">Finger(<span class="k" data-page-node-id="4kQ5DIgckxUWTLyqyZ9JOD">int</span> ch, <span class="k" data-page-node-id="6PW8mmO2SWG7JSFF8GGpMK">int</span> open, <span class="k" data-page-node-id="aSVqM06xH6wunFKw4vPMLy">int</span> closed, <span class="k" data-page-node-id="a2YATYNMDjF8y7OoMXwzGz">int</span> dir)
+  : channel(ch), maxOpen(open), maxClosed(closed), direction(dir) {
+  currentPosition = (direction == <span class="n" data-page-node-id="fYa9IPrlDqMf3qw8qAkHbg">1</span>) ? maxOpen : maxClosed;
+  target = currentPosition;   <span class="c" data-page-node-id="yEACvkN7PaHSFD5y5HYf4j">// 目标 = 当前位置 → 开机先不动</span>
+  step = DEFAULT_STEP;
+}</code></pre>
+  <p data-page-node-id="5cxETtcjtrWLTRybkoqSni">冒号后面那一长串叫"初始化列表"，作用是<b data-page-node-id="vKp4o7hewpkw9barXzf03o">把括号里传进来的参数，直接存进自己的属性里</b>。</p>
+
+  <h4 data-page-node-id="wcyKARKi3f1lAEYrQFTQ0u">★ 核心换算一：百分比 → 角度</h4>
+  <pre data-page-node-id="FBWsyY1UrbB1oh8gqBdqmA"><code data-page-node-id="xlFqIXNDy7z0X96Wrm0Xw6"><span class="k" data-page-node-id="GCvr1q18qE707AhyWCPIlB">void</span> <span class="f" data-page-node-id="afEO9ngCoa6M1xEHHqMX4a">setTargetNormalized</span>(<span class="k" data-page-node-id="2HGykbMPiR36QEQCPdjIlR">int</span> normalizedPos) {
+  <span class="k" data-page-node-id="pSu9NKyFNyReCUxo3nhRpV">if</span> (direction == <span class="n" data-page-node-id="qguZCtgnB7vhd048MlV3hJ">1</span>) {
+    target = <span class="f" data-page-node-id="y10N92U9A1VB1gEYMncGGt">map</span>(normalizedPos, <span class="n" data-page-node-id="60e4NvKyOB71SOlAxymyCH">0</span>, <span class="n" data-page-node-id="u1I6963TxJFhPqzy5i0kCe">100</span>, maxOpen, maxClosed);
+  } <span class="k" data-page-node-id="9aZRNvt14Xjh9LnHR63xUs">else</span> {
+    target = <span class="f" data-page-node-id="beAYW3hnz6IZ1mN3VD7D7z">map</span>(normalizedPos, <span class="n" data-page-node-id="wONcFtC2GkQnwVSpJhdz2b">0</span>, <span class="n" data-page-node-id="bd5v4AFjArUH155jtknZde">100</span>, maxClosed, maxOpen);
+  }
+  target = <span class="f" data-page-node-id="0RKpFD1EXS56RubBS6SHow">constrain</span>(target, <span class="n" data-page-node-id="8XKoRuS3Aj4WhUnkMfjR3j">0</span>, <span class="n" data-page-node-id="R0oltZ4cxisOLvWNhKB7KQ">180</span>);
+}</code></pre>
+  <div class="pair" data-page-node-id="VvdWDWLbdtRLwRIzMfT6Om">
+    <div class="say" data-page-node-id="JqJSMtVPZHrXdQvEc0qm0A"><b data-page-node-id="WRWdPkHMcNxwYILREK7HEC">这是全套代码最聪明的设计。</b>外部只需要给一个 <b data-page-node-id="Tg7kww0bbp4KZVEIhtXXkg">0~100 的"握紧程度"</b>：<br data-page-node-id="b4UN2CRyXmJLqnashxC2sB">
+    &nbsp;&nbsp;• 0 = 完全张开 &nbsp;&nbsp;• 100 = 完全握紧<br data-page-node-id="QLfZ3PES3Uc7kFhL8GvJWv">
+    至于这根手指的舵机是正装还是反装、张开角是 0° 还是 180°，全部由这一个函数内部消化掉。<br data-page-node-id="B9VeTAuKbRSOMSxTKO7F1D">
+    结果就是：<b data-page-node-id="b0gjrmqPCds6DAFqUiwmwl">写手势的时候，所有手指都用同一套 0/100 语言，不用考虑机械差异。</b></div>
+  </div>
+
+  <h4 data-page-node-id="pwwqaXjmGhKQnAxf5r5ppL">★ 核心换算二：角度 → 脉宽（run 函数，第 78~88 行）</h4>
+  <pre data-page-node-id="h6VYvwbd3iAjHcIpO6xAPI"><code data-page-node-id="Dy4rxDzWP1mbW8u58WoaHT"><span class="k" data-page-node-id="eax7ILXOKR5r6G9YDNjPDn">void</span> <span class="f" data-page-node-id="Fdpn7xkKeLW35S5Z1BNVhp">run</span>() {
+  <span class="k" data-page-node-id="uoU8ewWktg6trTkjFmSe76">if</span> (<span class="f" data-page-node-id="lLWywlHfQx19OydcDXQy4l">abs</span>(currentPosition - target) &lt;= step) {
+    currentPosition = target;          <span class="c" data-page-node-id="8zGXaOlowGCTAjkjcFI3bA">// 很近了，直接对齐，防止抖动</span>
+  } <span class="k" data-page-node-id="UXJfHYnXcKMSJhNi53raFt">else if</span> (currentPosition &lt; target) {
+    currentPosition += step;           <span class="c" data-page-node-id="K7BvN9YJyszyjfPD5k2SqS">// 还没到，往大走一步</span>
+  } <span class="k" data-page-node-id="LinPsqWcJtxZRufJMrZ637">else</span> {
+    currentPosition -= step;           <span class="c" data-page-node-id="N6FxJrd7W22KodPn6Dm9Vt">// 过头了，往小退一步</span>
+  }
+
+  <span class="k" data-page-node-id="ByyRYkiVRJuuObiFv1aS9q">int</span> pulse = <span class="f" data-page-node-id="ZzDbuhkrKUdmSwMWtpfK61">map</span>(currentPosition, <span class="n" data-page-node-id="3JlXwpXsSc3SiQddkalUY6">0</span>, <span class="n" data-page-node-id="7Dxf7hxQjvsdTMJmkBxvl3">180</span>, SERVO_MIN_PULSE, SERVO_MAX_PULSE);
+  pwm.<span class="f" data-page-node-id="Di3OGcjUACFn0qxesG0GGa">setPWM</span>(channel, <span class="n" data-page-node-id="79yvXjc7fTZnaPyXEvL0KZ">0</span>, pulse);      <span class="c" data-page-node-id="2jjKolfvErHmy4uBayGLEN">// 真正把信号发出去</span>
+}</code></pre>
+  <div class="pair" data-page-node-id="hsDIrfjSPDX95sWzFFwsC6">
+    <div class="say" data-page-node-id="HcEbaGChOLkZD7hSr3Y6PG"><b data-page-node-id="ABBxMB6FvRBSptDXQffNC3">逐句拆解：</b><br data-page-node-id="0tsFdLRkvWHxNLqCmc1Odu">
+    ① <b data-page-node-id="v2Nzc5MgTgWs3GkRw8fIh9">abs()</b> = 取绝对值，算出"离目标还差多远"。<br data-page-node-id="wEPOhcyImbR47agmQHD5CB">
+    ② 如果差得比一步（step）还小，就直接对齐 —— 这一步很重要，否则手指会在目标附近来回抖动。<br data-page-node-id="14BlYgZB5CyQMtyYtHD0Eg">
+    ③ 否则就加一步或减一步，<b data-page-node-id="dSNDSp1H1VJGwG6eKrpPVt">一次只挪一点点</b>。<br data-page-node-id="bezQwhIfWgt39DSxPvG9ej">
+    ④ <b data-page-node-id="QfqxEm3GOLlnimqWzK5szm">map() 做换算：</b>把 0~180 的角度，等比映射成 150~500 的脉宽数字。比如 90° 会算成约 325。<br data-page-node-id="ULXDnIATshDyND3ZXpeJlG">
+    ⑤ <b data-page-node-id="QyvopZYG8yo3mOjZeAEKG9">setPWM()</b> 是唯一真正让舵机动的语句。<b data-page-node-id="4Al4UBdNViWMqr3ZXO8jXL">整份代码里，只有这一行能让舵机转。</b></div>
+  </div>
+  <div class="note" data-page-node-id="FddCOtjJQ0FcDlR4H45LkD">
+    <span class="lbl" data-page-node-id="zyVhLQLQsfOx04frhD086R">再强调一次</span>
+    <code data-page-node-id="jBmV2rBt1WVYSWBqe4GJGl">run()</code> 本身不知道"什么时候该动"。它只是"走一小步"。谁在不停地叫它走？——是 <code data-page-node-id="3Un4XRuES3GLLEoEa0pioa">loop()</code>。这就是"平滑移动"的全部秘密。
+  </div>
+
+  <h3 id="s4-4" data-page-node-id="SwwsXuBmDFXywrGMCGrO80">4.4 Hand 类 —— 一整只手（第 95~111 行）</h3>
+  <pre data-page-node-id="Wudi9iFtoa9TEI3jmuNjWH"><code data-page-node-id="aVnKhWGuVBiRgdyDDESwtV"><span class="k" data-page-node-id="2WFLNE0mfswNafzhQStz9Z">class</span> <span class="f" data-page-node-id="DB8yyXGifZj46XdcCNpHN5">Hand</span> {
+<span class="k" data-page-node-id="NkYty7eD9vRa7oPkLcxanO">public</span>:
+  Finger* fingers[<span class="n" data-page-node-id="nrSGOPAu50ow253D3CebHC">5</span>];        <span class="c" data-page-node-id="BgP1FDF9uRisAyrj3DAQKd">// 5 个格子的数组，每格放一根手指</span>
+
+  Hand() {
+    fingers[<span class="n" data-page-node-id="RzWpBRmdzEnEDHUW8LH80w">0</span>] = <span class="k" data-page-node-id="zALZrxRfV1tJo39xYRQxBB">new</span> <span class="f" data-page-node-id="OijnJb8t1X48Q5PmJux8SF">Finger</span>(FINGER_THUMB,  THUMB_MAX_OPEN,  THUMB_MAX_CLOSED,  <span class="n" data-page-node-id="z2iAEIYs7DXnsTF09BhHbk">1</span>);
+    fingers[<span class="n" data-page-node-id="Gss9T3yUqHiwniHoU4pkID">1</span>] = <span class="k" data-page-node-id="g4zN9jl1eV0PL3qL4eLCqa">new</span> <span class="f" data-page-node-id="Ht8LovqDMHzXxsw0HvyDkO">Finger</span>(FINGER_INDEX,  INDEX_MAX_OPEN,  INDEX_MAX_CLOSED,  <span class="n" data-page-node-id="U3A5kCHCGlWEviZSLYxtx3">1</span>);
+    fingers[<span class="n" data-page-node-id="wqxvjnXSsBN4hwgiukeuCp">2</span>] = <span class="k" data-page-node-id="28TqUpSCPKjDZ8v4hxYkH6">new</span> <span class="f" data-page-node-id="AnHgbB2DSzGNAToorcAU6t">Finger</span>(FINGER_MIDDLE, MIDDLE_MAX_OPEN, MIDDLE_MAX_CLOSED, <span class="n" data-page-node-id="c1GJKeGqSU6AT4oKIMfZQr">-1</span>);
+    fingers[<span class="n" data-page-node-id="3DG6f1OIY1stOd9HKHXSZg">3</span>] = <span class="k" data-page-node-id="YQ165J2NolaLBRES0b2aCL">new</span> <span class="f" data-page-node-id="TITplLZAIGoxsnimOjdmgt">Finger</span>(FINGER_RING,   RING_MAX_OPEN,   RING_MAX_CLOSED,   <span class="n" data-page-node-id="Ekya6AveJ4wG1ktE7uvBUE">1</span>);
+    fingers[<span class="n" data-page-node-id="U0kzteoRDroXoEgUznNbGj">4</span>] = <span class="k" data-page-node-id="t9dbxCpV81oASuoKcf1mlH">new</span> <span class="f" data-page-node-id="0knun3ePtQ7EZ5kcGKOOCv">Finger</span>(FINGER_PINKY,  PINKY_MAX_OPEN,  PINKY_MAX_CLOSED,  <span class="n" data-page-node-id="igchEntHj6u0ZtdBGEkABa">-1</span>);
+  }
+
+  <span class="k" data-page-node-id="d0BQDrXWJWFE54RF7pUR4A">void</span> <span class="f" data-page-node-id="ygxNVay6z3adSLoaBXIDSs">moveToNormalized</span>(<span class="k" data-page-node-id="LyLRFaASUp8lYH4mTEoy8a">int</span> pos) { <span class="c" data-page-node-id="Sch6dFYJJuciFU1WvYENw8">// 5 根一起动</span>
+    <span class="k" data-page-node-id="UkYM5gBbFLZxRBZUqYBSNz">for</span> (<span class="k" data-page-node-id="sjB1LxVtTtB1ILiQmTNVss">int</span> i=<span class="n" data-page-node-id="0Sbj4U09gd8RVaXLZTFU2i">0</span>; i&lt;<span class="n" data-page-node-id="DFO0aAf23zOQfhdY1Osuw2">5</span>; i++) fingers[i]-&gt;<span class="f" data-page-node-id="bgFrLDg4fRm1uvHFc24rd8">setTargetNormalized</span>(pos);
+  }
+  <span class="k" data-page-node-id="7IUH4RtNuXu0ed6octBPZJ">void</span> <span class="f" data-page-node-id="gA5bOkCwH5KIGy7xhfXyEl">run</span>() { <span class="c" data-page-node-id="Qb53imLJCBR3vYXFDkGFg0">// 5 根各走一小步</span>
+    <span class="k" data-page-node-id="sE0qOdttbxDg5SCoWXIk8Q">for</span> (<span class="k" data-page-node-id="wQzddWyzZ9AOC6Sc9Jv2Mq">int</span> i=<span class="n" data-page-node-id="96iHOFmdGbTgAltP8qMzsf">0</span>; i&lt;<span class="n" data-page-node-id="FfT8w6oF4YJwhQUXi20F9M">5</span>; i++) fingers[i]-&gt;<span class="f" data-page-node-id="JCLmb9hBCpXHLL3rMl94YQ">run</span>();
+  }
+};</code></pre>
+  <div class="pair" data-page-node-id="VQGsE7Sj72fOl0ATHABaU1">
+    <div class="say" data-page-node-id="WRmFGhor8u0cySQoGsPTkf"><b data-page-node-id="qRQJSvlgEM8COLeuu7UH3m">Hand 自己几乎不干活，它是个"班长"。</b>你叫班长"全体握拳"，班长就挨个通知 5 个组员。<br data-page-node-id="hAIG1oju4hGxF2QnbuOZ8z">
+    看最后那个 <b data-page-node-id="wiFNnAFompLDTydBQML0Ca">1 / -1</b>：中指和小指是 <code data-page-node-id="HhaWVPnqoyiSYLRsfb1yo4">-1</code>，说明这两个舵机是反装的。<br data-page-node-id="isUeDzXfK8rwM0JWMh3Vbz">
+    注意 <code data-page-node-id="IzQpNOfwaGRP80xUXpcEix">fingers[i]-&gt;run()</code> 里的箭头 <code data-page-node-id="VZXiYi5Xsn20pstaAnNy5Q">-&gt;</code>：意思是"让第 i 号手指去执行 run()"。因为 fingers 里存的是手指的"地址"，不是手指本身。</div>
+  </div>
+
+  <h3 id="s4-5" data-page-node-id="423x2OKmT0jmWGhWoseZe1">4.5 HandMovementFactory —— 手势菜单（第 114~183 行）</h3>
+  <p data-page-node-id="kiRsTDpCuQ6VGxvheFZlEI">这个类就是一张菜单。你报一个名字，它把 5 根手指的目标值摆好。规律非常好找：</p>
+  <pre data-page-node-id="MwvCanL8wE8DoWEGWCTSEF"><code data-page-node-id="sdrjsvAeqmFTl4erhmtkIw"><span class="k" data-page-node-id="sL1JD2HwBdkfh1WJDaUFlA">if</span> (name == <span class="s" data-page-node-id="6evv3ps9U8SoBb2xr3x2Gr">"fist"</span>) {
+  hand-&gt;<span class="f" data-page-node-id="QciMJKWftkhPM2cIi4DeQI">moveToNormalized</span>(<span class="n" data-page-node-id="DOM4yVfpBsLM8aU70GXir5">100</span>);              <span class="c" data-page-node-id="ELk8MiKNslYf5TYKYcdf67">// 握拳：全体 100</span>
+} <span class="k" data-page-node-id="ZodAn4N5vigmsQhyxriVXW">else if</span> (name == <span class="s" data-page-node-id="68BQcvefbkF4DFWZEG03ws">"one"</span>) {
+  hand-&gt;fingers[<span class="n" data-page-node-id="qSOzrwlt1rzZKJxzpQB5E7">0</span>]-&gt;<span class="f" data-page-node-id="MrHZ4Gd7U5ZwX2U7TMdbit">setTargetNormalized</span>(<span class="n" data-page-node-id="b2xN28TpofZcp2d40VA3Q8">100</span>);   <span class="c" data-page-node-id="jVqZ184KKF08JijwyMy6CY">// 拇指  握紧</span>
+  hand-&gt;fingers[<span class="n" data-page-node-id="oOLWuF46Co1ylsSQGLcyNm">1</span>]-&gt;<span class="f" data-page-node-id="l4sD8C3fFitjkU8NDlN5TP">setTargetNormalized</span>(<span class="n" data-page-node-id="74nNtqJu9wQv9ZwJigcdNi">0</span>);     <span class="c" data-page-node-id="3IHDREzn7hN4rLc1PU9HWE">// 食指  张开 ← 只有它伸出来</span>
+  hand-&gt;fingers[<span class="n" data-page-node-id="FuCQcQMS0Sa9KDUz8jbnQJ">2</span>]-&gt;<span class="f" data-page-node-id="DDJulW0xFJi0gmRVchG7dn">setTargetNormalized</span>(<span class="n" data-page-node-id="PQI6SGgToBEATACRqgG1JI">100</span>);   <span class="c" data-page-node-id="MH4fJ0yE5bVzD6C3ieTwFO">// 中指  握紧</span>
+  hand-&gt;fingers[<span class="n" data-page-node-id="oJd4hWyWp2SqD1BvtUlsHV">3</span>]-&gt;<span class="f" data-page-node-id="EurD5ZSlHBSKeVAaTELDJT">setTargetNormalized</span>(<span class="n" data-page-node-id="PwrbmSZSqkoYQ5JuiiS0aN">100</span>);   <span class="c" data-page-node-id="j2onQ5fVHAIvtcTdWzRoif">// 无名指 握紧</span>
+  hand-&gt;fingers[<span class="n" data-page-node-id="L0xZ5pudPFrnkDDOf7M7R5">4</span>]-&gt;<span class="f" data-page-node-id="u5BLS3klQNlVvMDVDn29F0">setTargetNormalized</span>(<span class="n" data-page-node-id="anc4jORRCNnWcGeEoL3Kwo">100</span>);   <span class="c" data-page-node-id="VBNm6AzHyp0eNnj9p3ZqQK">// 小指  握紧</span>
+}</code></pre>
+  <div class="note" data-page-node-id="xC6inIMW1LyDFH9NGLc4FJ">
+    <span class="lbl" data-page-node-id="IcXRd8cEUD1Kjf9Ut2mxxd">重要</span>
+    这些函数<b data-page-node-id="a5dEEcxeBstSOSyhb3UGZL">只是在"设定目标"</b>，不会立刻让手指动。真正的运动发生在 <code data-page-node-id="zGjJsRMDjjJNMJMEkfqwQF">loop()</code> 里。所以你点一下"握拳"，手指是<b data-page-node-id="2DBd9xggy0nGdSwZ2fibfC">缓缓</b>握住，不是瞬间缩起来。
+  </div>
+  <p data-page-node-id="OmS54n2VqD4MgSlqV2U91i">最后那个 <code data-page-node-id="1U2ageQ4VoN4rphq77m7jF">else</code> 分支：如果名字一个都对不上，就在串口打一行提示，方便你发现"是不是打字打错了"。</p>
+
+  <h3 id="s4-6" data-page-node-id="ZTFChcEsRYcix06OGefF4l">4.6 MyCallbacks —— 蓝牙收信员（第 189~215 行）</h3>
+  <p data-page-node-id="LqB0s5rks1RxHlCa2QH0It">这是整份代码的"入口"。每当手机往蓝牙特征里写数据，<code data-page-node-id="j7bTPDkQTeIsuV11C2xCiB">onWrite()</code> 就会<b data-page-node-id="NqWWJToQUttmi53PGTQcFz">被自动调用</b>（不是我们主动去调的）。</p>
+  <pre data-page-node-id="Fny5AXycpXJpaETby8C1oE"><code data-page-node-id="IwjFk4qrL8IG1TlhjPdnrF"><span class="k" data-page-node-id="YlDeA0vfudChqOy9Ab6vSc">void</span> <span class="f" data-page-node-id="NhRonYFMhEekLNJiK8cmWe">onWrite</span>(BLECharacteristic* pCharacteristic) <span class="k" data-page-node-id="CF7vCjvauSvLrJmtRXoWEi">override</span> {
+  String value = pCharacteristic-&gt;<span class="f" data-page-node-id="dMwjhICT2IstsgDnI267MA">getValue</span>();   <span class="c" data-page-node-id="MlGWhksyFwpBbIzqhCQXe8">// 1. 读出来</span>
+  <span class="k" data-page-node-id="k9sEcRQXM0OtFmqqCnTL5Z">if</span> (value.length() == <span class="n" data-page-node-id="2pkn9sqi1eeLG2R5T3LY3x">0</span>) <span class="k" data-page-node-id="jhEvFPTDSKEMVgzz4EHhc8">return</span>;             <span class="c" data-page-node-id="lzU6wtwYs13v574uczNqm3">//    空消息，忽略</span>
+  String cmd = value;
+  cmd.<span class="f" data-page-node-id="wEL5WtSdsc8IJzExlU4GJf">trim</span>();                                   <span class="c" data-page-node-id="gdGXFUpOBx342gJDyBibzC">//    去掉首尾空格换行</span>
+
+  Serial.<span class="f" data-page-node-id="JpFdfT48dcS7Y5QxPb6Att">print</span>(<span class="s" data-page-node-id="O6WcDEw9pM3rlGYVm9n5BY">"Received: "</span>);                   <span class="c" data-page-node-id="VgTRTDc1ssDqg3i5jeBESw">// 2. 打印出来方便调试</span>
+  Serial.<span class="f" data-page-node-id="sfzACBgRQZ0QVRWwKmgJ1m">println</span>(cmd);
+
+  <span class="k" data-page-node-id="OGoRI0AsPYtABDqWMZoBF6">if</span> (cmd.<span class="f" data-page-node-id="X7wYAX9B6LCfs8HNG6JebU">startsWith</span>(<span class="s" data-page-node-id="gnED28D3TjjGTjFBSmQkSN">"servo_"</span>)) {                <span class="c" data-page-node-id="3rVcAGCEnj66iBMqFJNRfZ">// 3. 判断格式</span>
+    <span class="k" data-page-node-id="b1ftW64ds0WLCKCApSf0R0">int</span> eqPos = cmd.<span class="f" data-page-node-id="opO5RjeBFcEE4ENQodJqAz">indexOf</span>(<span class="s" data-page-node-id="U3ITQ02zyez7AIbGT0DhjV">'='</span>);              <span class="c" data-page-node-id="qdJVPn8AlGqlTI3hMj6pHt">//    找等号位置</span>
+    <span class="k" data-page-node-id="RnMaBCzlUC3RDMwjoo9H08">if</span> (eqPos != <span class="n" data-page-node-id="ylnFqzK6yf8ySr6Ycl4HJe">-1</span>) {
+      String idxStr = cmd.<span class="f" data-page-node-id="8vJ6HNNEdaCLKmfWKQFzAp">substring</span>(<span class="n" data-page-node-id="6JPY6mbJlCJfHkzguCHsbD">6</span>, eqPos);    <span class="c" data-page-node-id="JqjBVtBERXEvaOd4E7nPqH">//    切出 "1"</span>
+      <span class="k" data-page-node-id="eOShjtRUUaJJ4fru59frqR">int</span> finger = idxStr.<span class="f" data-page-node-id="JT62DhoXhUz4REaRDHHSn5">toInt</span>();               <span class="c" data-page-node-id="di1P48V9OCvlVzHfyYCZdW">//    变成数字 1</span>
+      <span class="k" data-page-node-id="VCRACuGnxfHJEx2GEGA11X">if</span> (finger &gt;= <span class="n" data-page-node-id="rhQAZI0ofBuOOZSK4qNCvo">0</span> &amp;&amp; finger &lt; <span class="n" data-page-node-id="BiQmmKMHoMtEdvlfxUhoNf">5</span>) {           <span class="c" data-page-node-id="C9Gx3tYJdkcaick1VD5plf">//    编号必须合法</span>
+        String angleStr = cmd.<span class="f" data-page-node-id="RXzS9sc9QBeEDl1IPHybeE">substring</span>(eqPos + <span class="n" data-page-node-id="bp59c6YD6HFKUGu2ZmvKiC">1</span>);
+        <span class="k" data-page-node-id="Fb4BSB6nO8XglrXDE4dQrR">int</span> angle = angleStr.<span class="f" data-page-node-id="P0XGqo0DM4wH3x5f5hfM6J">toInt</span>();            <span class="c" data-page-node-id="8qOe3g0RApEz0B5sWAIrf9">//    切出 "90"</span>
+        hand.<span class="f" data-page-node-id="5vGbQIOyGOWG6yOnaxfdFz">moveFingerAngle</span>(finger, angle);    <span class="c" data-page-node-id="T9UJqvFUyH8kbZflp0v8QN">//    设定目标角度</span>
+      }
+    }
+    <span class="k" data-page-node-id="fPCyeuEhgyup2kfo0CqaCp">return</span>;                                        <span class="c" data-page-node-id="RIKyLNtF22CHPI1aDwaDoC">//    处理完就结束</span>
+  }
+
+  HandMovementFactory::<span class="f" data-page-node-id="aZR9oB5E07kEesKR0qJ0kH">applyGesture</span>(&amp;hand, cmd);  <span class="c" data-page-node-id="ujGYKCgMsQCxj0GTMnuBs7">// 4. 否则当成手势名</span>
+}</code></pre>
+
+  <h4 data-page-node-id="CawVYpzOweaAE4FyzBquZe">字符串 "servo_1=90" 是怎么被切开的？</h4>
+  <table data-page-node-id="9XXoccdAGcKd83LO1eNewr">
+    <tr data-page-node-id="AgDJ0t1qr5gA4BD4FmoJYz"><th data-page-node-id="VoOOhFcgzL7MRF84W9hLyu">字符位置</th><th data-page-node-id="xVzX7KmUCvzaVFYTR0Dgfu">s</th><th data-page-node-id="dBEJ5sH3qzrwglruVuCdk7">e</th><th data-page-node-id="knepGZzVcwBDBRDwGWhUyw">r</th><th data-page-node-id="ksiwX53P50ge85YxGl0j2C">v</th><th data-page-node-id="riq7k3wBMt6vFAsHO2dqYs">o</th><th data-page-node-id="vDTbguo3BPtL9rGiMW2HBS">_</th><th data-page-node-id="zvLDcWFnebWC05rOivKQky">1</th><th data-page-node-id="bi8WuFHIqzEOrypmrygBl9">=</th><th data-page-node-id="55oWnrNL507OTCgmH5Rq32">9</th><th data-page-node-id="tJVaSl4OA6r7Lo47MKRV3H">0</th></tr>
+    <tr data-page-node-id="j8VKMS2i4PsGz5cEi4Gtxl"><td data-page-node-id="bxD64huEvDfoRuQJbrDSVe">下标</td><td data-page-node-id="mC8gvne0Lfl48xRYFOXTiu">0</td><td data-page-node-id="0XNAwRkvmpbnkQPBKzG2My">1</td><td data-page-node-id="lCtIjLXfnfGrHQ07Mc6k6z">2</td><td data-page-node-id="2uwjW1nTZCthYGynEDNGoK">3</td><td data-page-node-id="HSG3XuQEOA9HZq2GnxeMlG">4</td><td data-page-node-id="43R7JjIQqYenDZ6OGaYqzn">5</td><td data-page-node-id="Kab9xzqsX9ennUPYJe5SEO">6</td><td data-page-node-id="1PK445NiIPVa46SEQnS92L">7</td><td data-page-node-id="YDfKVXERyUhPWr77bXNjqa">8</td><td data-page-node-id="MMreURYsGWZDlLBBrjIzAK">9</td></tr>
+  </table>
+  <p data-page-node-id="OdgllDqC35LxBvsLoQN9iR"><code data-page-node-id="SSFyP6udUmo57ifZ8cuFS3">indexOf('=')</code> 找到 7。于是 <code data-page-node-id="bsNKp9m8UNMFjIezBFQscb">substring(6, 7)</code> 切出 <code data-page-node-id="73VxwQ6BcIpCyghBXBVNFP">"1"</code>（手指编号），<code data-page-node-id="uhyeF7v3Gyzq4UC8sCfwtU">substring(8)</code> 切出 <code data-page-node-id="6JX3Fedfte5b5JAjXxoewo">"90"</code>（角度）。<b data-page-node-id="qImzuM36Cm22k0iFCFZgHH">注意下标是从 0 开始数的</b>，这是编程里的通用规矩。</p>
+  <div class="tip" data-page-node-id="fzu91V31X94bL8PG7bERK0">
+    <span class="lbl" data-page-node-id="F0FmKKQwXhBpai8DBcYyV1">调试技巧</span>
+    如果你的机械手不听话，打开 Arduino IDE 的"串口监视器"（速度选 115200），就能看到每一句 <code data-page-node-id="70YhqkPpuuMmNa49mNzGoj">Received: xxx</code>。这样一眼就知道是"指令没收到"还是"收到了但没看懂"。
+  </div>
+
+  <h3 id="s4-7" data-page-node-id="K7Ye9bZeJPTIDdfjqUsJBL">4.7 setup() —— 开机清单（第 218~264 行）</h3>
+  <p data-page-node-id="FCuY1YEQxMvHcxEBJW985l">上电后只执行一次。分成 5 步，非常好读：</p>
+  <ol class="steps" data-page-node-id="dMn7TK7dgo1zhJZhztk2WB">
+    <li data-page-node-id="Aw8QsxNKJvqCjlwBQ8TW8o"><b data-page-node-id="gUiM1H0dE2N0T3mU0bRGaJ">开串口（115200）</b><span data-page-node-id="68wfay8igQx55A52ln2c0j">为了能用电脑看日志。<b data-page-node-id="OLL2bzhzqMrkFasnPW7EZD">串口监视器里波特率必须也选 115200</b>，否则全是乱码。</span></li>
+    <li data-page-node-id="XdRt78MLodGx57WtIp8sEb"><b data-page-node-id="r1wieCUKoG2Npxuek4cXmF">启动 I2C 并初始化驱动板</b><span data-page-node-id="wCAbS2x825sNJwS2wYK7gm"><code data-page-node-id="W3DUvx3iXIVyMegT5Z2Cop">Wire.begin(8, 9)</code> 指定引脚；<code data-page-node-id="puVcAVD7G9fitMf1cGQ0y1">pwm.begin()</code> 唤醒板子；<code data-page-node-id="7z6Vw05thImFaN1NwoBNUf">setOscillatorFrequency(27000000)</code> 告诉它晶振是 27MHz，否则频率会算错。</span></li>
+    <li data-page-node-id="ARSuMXvDLtSgQ90NR7kOvy"><b data-page-node-id="JfTW74rcT4IcTxKybL6N9L">自检：驱动板接好了吗</b><span data-page-node-id="pOtaekJIm2rAxAHmHGXiPd">给地址 0x40 发一个空消息，返回 0 表示对方应答了。如果没应答就打印错误并 <code data-page-node-id="JgDLby1C7LUYBBX4L3UFEG">while(1)</code> 卡死 —— 这是故意的，硬件不通后面做啥都白费。</span></li>
+    <li data-page-node-id="OpjvwHesP8dHMuuox6eR5b"><b data-page-node-id="uzUcgjszyMOW65N2ZZSZ4K">让所有手指回到"张开"</b><span data-page-node-id="aTtLRQ1RHEjPt2oDUM6emM">先设目标，再直接输出一次信号。<b data-page-node-id="4wheQD2knpl4ZYWFvT48oI">这是为安全：防止上电瞬间手指突然攥紧夹到东西。</b></span></li>
+    <li data-page-node-id="uJp7FAOYQYZZm8CDC98Ueb"><b data-page-node-id="IjapZdeZyF79Mh7VmXCSKn">打开蓝牙，开始广播</b><span data-page-node-id="WAxXhO819AQe7JpBUSL6Li">设备名 <code data-page-node-id="YpSW7m4TLF7NmMVXrspXTJ">xiaochu</code>，手机上搜到的就是它。挂上收信员 <code data-page-node-id="gtIIVNsxb7XEb5DASt5IsQ">MyCallbacks</code>，然后 <code data-page-node-id="2XPMDfYdl7ovkEH8fw0xIw">pAdvertising->start()</code> 让手机能发现。</span></li>
+  </ol>
+  <pre data-page-node-id="qweunvmwd9sEsD8NaKWGRM"><code data-page-node-id="dbXfAF4EbtquCsaTdx9dBX">Wire.<span class="f" data-page-node-id="y3MvaFxmLcVdJhnMv3PYcU">beginTransmission</span>(<span class="n" data-page-node-id="WaDfDKDaOkWMXhUFs2cWYg">0x40</span>);
+<span class="k" data-page-node-id="RCeUkLQsHEGGMfUXYhiF5k">if</span> (Wire.<span class="f" data-page-node-id="XjfhR0IW0o9Nb7plpyor5t">endTransmission</span>() == <span class="n" data-page-node-id="COnkYsoaNBqFQnE58jcEtQ">0</span>) {
+  Serial.<span class="f" data-page-node-id="LyZMX8DEpmuB1FGOz9uqjm">println</span>(<span class="s" data-page-node-id="MzdVBVw5dRUvvYWLzjzq7p">"PCA9685 found at 0x40"</span>);
+} <span class="k" data-page-node-id="A2OjezC6kNjOFsThYDoDte">else</span> {
+  Serial.<span class="f" data-page-node-id="hxsRZHMkKj28V2jPzbHIbI">println</span>(<span class="s" data-page-node-id="yZHO6dakHEFXWgH7rMv7CF">"ERROR: PCA9685 not found!"</span>);
+  <span class="k" data-page-node-id="8dCfakBTCoA1LkAzEloTaS">while</span> (<span class="n" data-page-node-id="8EjiCyJJvEW9bC4Oq36DvN">1</span>);        <span class="c" data-page-node-id="4y2I4LM5pcU1AJqNhkDJSI">// 停在这里，不再往下走</span>
+}</code></pre>
+  <div class="warn" data-page-node-id="jP4rZrHducVq6vfsHENKhb">
+    <span class="lbl" data-page-node-id="1gq5p8S334Mz4Ayd8yKANS">看到这行说明什么</span>
+    如果串口一直显示 <code data-page-node-id="HnbaAGv11zFbON4UTZP5hi">ERROR: PCA9685 not found!</code>，那就是硬件问题，不是代码问题。按顺序查：<br data-page-node-id="wlP8hwOwWLaUoLw7v2WpD4">
+    ① SDA/SCL 是否接反（GPIO8 / GPIO9）② 驱动板 VCC 是否接了 3.3V ③ GND 是否共地 ④ OE 是否接了 GND。
+  </div>
+
+  <h3 id="s4-8" data-page-node-id="XpQny45pnzUt5OIcd5BDas">4.8 loop() —— 心跳（第 267~270 行）</h3>
+  <pre data-page-node-id="vRowqwDQBM8WPy0YUfZ1Lk"><code data-page-node-id="y3efumleDTAShoNeLC3vfK"><span class="k" data-page-node-id="L4y3OEQavleFdY8bM0ZGRH">void</span> <span class="f" data-page-node-id="jj1kHdSCZpSCo0GwxVwGgo">loop</span>() {
+  hand.<span class="f" data-page-node-id="udzLAL37Ge9G5ZS6gl3CsL">run</span>();      <span class="c" data-page-node-id="pEito83ofz5x4oB3uH9ICw">// 5 根手指各朝自己的目标挪一小步</span>
+  delay(<span class="n" data-page-node-id="0kcFiS7BTsOuN2yuJcQPQB">10</span>);       <span class="c" data-page-node-id="Q16B1rEdtN1KgrZBSgwKqL">// 停 10ms 再进下一轮</span>
+}</code></pre>
+  <p data-page-node-id="e9DjFWcPxRDSqnrYKUEwZm">只有两行，但它是"手指能动起来"的根本原因。程序会以约每秒 100 次的速度重复这两行，所以：</p>
+  <table data-page-node-id="f45bKrl7ZNBt2LjOi6qGrg">
+    <tr data-page-node-id="41BC7Ygz9Lr935kAC10qRu"><th data-page-node-id="2anSa9Rvy8Q4GrES6TwTea">step 值</th><th data-page-node-id="UwdU1u0Rt6ijRWiCcNJ04s">走完 100° 需要</th><th data-page-node-id="L2Gw5hJi8RFHLS2wLae6oU">手感</th></tr>
+    <tr data-page-node-id="Zg9Tk6DCoY69bKbk4vbkBV"><td class="mono" data-page-node-id="71GkHQKglH85RtdWYKepNF">2.0（当前）</td><td data-page-node-id="LgvuCGELRXC3kY0kqxfTD2">约 0.5 秒</td><td data-page-node-id="h87XsplHOyrRNMhVL1jNZC">利落，稍快</td></tr>
+    <tr data-page-node-id="mM3R1ca43j1ec5FtODLTCk"><td class="mono" data-page-node-id="1fUXuwuGRNgDu2iBy5p0CL">1.0（原来）</td><td data-page-node-id="ck4AIlGQXIUQy2Fv3bilew">约 1 秒</td><td data-page-node-id="xaBON04JM0Ne813axuqwpd">平稳自然</td></tr>
+    <tr data-page-node-id="85tiHH5Rde50tIsBDitNiM"><td class="mono" data-page-node-id="t6RE0M6SKSR5Eqm3KG5RAq">0.3</td><td data-page-node-id="6JD7j5miHxzR5JAC88tbqU">约 3.3 秒</td><td data-page-node-id="A0vUGCN2TJbFjoqYiHrhGK">很慢很柔，像科幻片</td></tr>
+  </table>
+</section>
+
+<!-- ================= 5 ================= -->
+<section id="s5" data-page-node-id="zQJcutGs5oT57r5hWWO7LY">
+  <h2 data-page-node-id="ej6wukSAEPmcCckVGcq6fV"><span class="num" data-page-node-id="uD6e9eXSo6IRNI1Gx51qe3">5</span>三个核心机制，再串一遍</h2>
+
+  <h3 data-page-node-id="rTY7TClwDLrBEd3u0Qm6yO">机制一：两套坐标系（0~100 和 0~180）</h3>
+  <pre data-page-node-id="aFRxDWhkQhKmneH96hRLQd"><code data-page-node-id="EzBea8SQP2manITCOWC2y3">写手势的人只面对：  <span class="n" data-page-node-id="VGfYIeUXBOiLJ2Iv8EHlHa">0</span> ~ <span class="n" data-page-node-id="wl0SE3VEYASBQMKdut3jVH">100</span>      （0=张开，100=握紧）
+                      ↓  setTargetNormalized() 内部自动转换
+代码内部处理的是：  <span class="n" data-page-node-id="NN3IxjNRLmHdJhG22qr8Oa">0</span>° ~ <span class="n" data-page-node-id="St5tZC0EUuPm3z9U8nFTLh">180</span>°     （舵机真实角度）
+                      ↓  run() 里再转换一次
+驱动板需要的是：   <span class="n" data-page-node-id="owvCAV9i9JkcY1YTQmFq2Y">150</span> ~ <span class="n" data-page-node-id="RE4hP71tNorLWM2D4zNT1V">500</span>     （脉宽数字）</code></pre>
+  <p data-page-node-id="T3GsDEiVGPFVdrUnVxfKkH"><b data-page-node-id="tYEFKwNUxhv4DY22pvKYDM">每一层只关心自己那一层。</b>这就是"分层"的好处：要加手势，你只管写 0/100；要换舵机，你只管调脉宽范围。互不影响。</p>
+
+  <h3 data-page-node-id="E6Q5rHEEpUXY36nrwkHCgj">机制二：map() 等比换算</h3>
+  <pre data-page-node-id="wAFvaVTExU6mVB9iP9oz8C"><code data-page-node-id="98H9vmMGiasBERagmFpupz"><span class="f" data-page-node-id="KupsXFQVFZ65uAiLGY0JoN">map</span>(要被换算的值, 原来范围最小, 原来范围最大, 新范围最小, 新范围最大)</code></pre>
+  <p data-page-node-id="ukfJSjeaqPUh53wqo3nkTy">假设要把 90° 换算成脉宽（范围 150~500）：</p>
+  <pre data-page-node-id="srZJvqb9BOFPvEZng2MzOa"><code data-page-node-id="ntT3Q9oaMXOmFEDV4pot3L">90° 在 0~180 里的位置 = 90/180 = 50%
+50% 落在 150~500 里 = 150 + 0.5 × (500−150) = <span class="n" data-page-node-id="FWhIZrv732g8pUg2RGeBCq">325</span></code></pre>
+  <p data-page-node-id="kiRf1GoETk1BqfKv4aoxY2">代码里 <code data-page-node-id="351OYJkktkfFGFATAXrR01">map()</code> 自动帮你算完了。如果反过来写 <code data-page-node-id="F3l79q0udmOJqbBMWnBYLG">map(v, 0, 100, maxClosed, maxOpen)</code>，就是"把范围倒过来映射"，用于处理反装的舵机。</p>
+
+  <h3 data-page-node-id="te1c9RB60G6XP6yju6Cyno">机制三：只改目标，不改当前值</h3>
+  <pre data-page-node-id="auT1aoCQMB97HbYtwgUAF4"><code data-page-node-id="sGArDBebarexWp2l6t5Ytm">收到指令 → 只改 target
+loop()   → 让 currentPosition 一点点靠近 target</code></pre>
+  <p data-page-node-id="77q7oscBzTKFlNEp0bwSWY">如果把这两件事混在一起（收到就立刻设位置），舵机会"唰"地甩过去，既吵又伤齿轮，还容易把机械结构撞坏。<b data-page-node-id="n62KBlwPsR68FprMCP6eHR">分开之后，才能实现平滑运动。</b>这个思路在机器人、动画、游戏里到处都在用，叫"缓动 / 插值"。</p>
+</section>
+
+<!-- ================= 6 ================= -->
+<section id="s6" data-page-node-id="IEvVV6fLtnwryu3ylbJXdl">
+  <h2 data-page-node-id="hQRGjwOWFBf4pYPPtAYhCu"><span class="num" data-page-node-id="cCsjirsFSRdksFa0HSaQw9">6</span>手势对照表</h2>
+  <p class="lead" data-page-node-id="I8Yew6ebBmHMAZC59gNTmB">对照代码第 114~183 行。手指顺序：拇 · 食 · 中 · 无 · 小。</p>
+  <table data-page-node-id="lIzne1ZfPAtqRmaEyLPWbF">
+    <tr data-page-node-id="tSWiFAkkUndmoKGrCd33at"><th style="width:110px" data-page-node-id="xxaeiCxuqmJvcUG1pf52U9">指令名</th><th style="width:210px" data-page-node-id="kx5W95pzzhby1Ctvyy36vD">手指状态</th><th data-page-node-id="luyF9DRis0Z2qtSQIDK4DQ">说明</th></tr>
+    <tr data-page-node-id="5TPc1FdYn1DwTQzJfbLAWK"><td class="mono" data-page-node-id="peABcsv2vrHUE4ShjJfftf">fist</td>
+        <td data-page-node-id="VYSymHK21yFnUSAGX2R0zM"><div class="fingers" data-page-node-id="jPm2DVm1vSlNoGdn5G89Ox"><span class="dot closed" data-page-node-id="9bWQhsVWwhMdsDpTmU4gg1">握</span><span class="dot closed" data-page-node-id="U8NfjEX0evDc8BzsQRMwE5">握</span><span class="dot closed" data-page-node-id="uIwuXfF5RMUf4TvNA2vYOv">握</span><span class="dot closed" data-page-node-id="Ca0g487H6jwSTYCeLGAHCl">握</span><span class="dot closed" data-page-node-id="qaCqELkMccqmqdNbBWeB84">握</span></div></td>
+        <td data-page-node-id="4noLQ4TEs3Qqta09xKqtRx">握拳，5 根全 100</td></tr>
+    <tr data-page-node-id="5DKvbYZJ0gWXMlhOuQ3F0X"><td class="mono" data-page-node-id="ObMIWlmfsxRiuduxRqmQJz">five</td>
+        <td data-page-node-id="YNIfrlnnT9dYIPi5HB68kz"><div class="fingers" data-page-node-id="Y1lcdtk0lOVu6IOy3J09LJ"><span class="dot open" data-page-node-id="4I35mnj6dKFnhTZvGHfTs2">开</span><span class="dot open" data-page-node-id="CN1j19y0y3xBnMGYAOeesT">开</span><span class="dot open" data-page-node-id="z4SzqvDzZDNzfFK3PqgEWM">开</span><span class="dot open" data-page-node-id="KBAZfyIQpbUGmGnYRN1ids">开</span><span class="dot open" data-page-node-id="mzaW70cJB4tWdELkih3bfW">开</span></div></td>
+        <td data-page-node-id="yn3hWOzHOtAZfAQ6L8fT2M">五指张开，全 0</td></tr>
+    <tr data-page-node-id="mmgqeRxTv4NRz85lS9DEgV"><td class="mono" data-page-node-id="PZ4FEtmfLDFQhs9t3vYHsT">ok</td>
+        <td data-page-node-id="5dRy2QtlOFmRTXHBxt6uKx"><div class="fingers" data-page-node-id="GD4nca4XK72qRFtj6hfgmp"><span class="dot open" data-page-node-id="eW3ok6IOEigwFJcuoCefpP">开</span><span class="dot closed" data-page-node-id="W5qGor2XnLxtwRjEGFClOu">握</span><span class="dot closed" data-page-node-id="4b6ZLRVUzcspgG9Tcihhcn">握</span><span class="dot closed" data-page-node-id="gEYDIRESWLMNiDUvuqeDI2">握</span><span class="dot closed" data-page-node-id="smh5ezW11aVxAZrrPH7ItL">握</span></div></td>
+        <td data-page-node-id="RHWPD4iedlwNbMepuCEHOs">拇指张开，其余握紧</td></tr>
+    <tr data-page-node-id="iOaxcBcurUQ8eNYtqonFKj"><td class="mono" data-page-node-id="hwlcCCBbuXUoTOCQNcrlre">rock</td>
+        <td data-page-node-id="rOdQBbKbQ08YnVjdrIz9Z3"><div class="fingers" data-page-node-id="coOT2emmVvGvbe9tLkbH7t"><span class="dot closed" data-page-node-id="icADQqlo5MdNqHSEMuZ329">握</span><span class="dot open" data-page-node-id="OhIdDftUQaItPvZ4D33Wzf">开</span><span class="dot closed" data-page-node-id="kSU0XjwL2juaeydIwHl6YM">握</span><span class="dot closed" data-page-node-id="AzhoR8yBM1YItSDeyGC6tp">握</span><span class="dot open" data-page-node-id="tK4Xf0stIVqSvs5edqagwv">开</span></div></td>
+        <td data-page-node-id="YRvt48WGzVIKPbA3UQTX0I">食指 + 小指伸出</td></tr>
+    <tr data-page-node-id="H4SiCyfvyxDTUDrbtZkSvV"><td class="mono" data-page-node-id="46iOcHUxQMngpHsaNmBihM">love</td>
+        <td data-page-node-id="FhSPLfZZLu9uJCNjFzx8YV"><div class="fingers" data-page-node-id="IQGtGH1x84bBGJDmlscbwc"><span class="dot open" data-page-node-id="vnn5maxZfyh404qjpH5Vgj">开</span><span class="dot open" data-page-node-id="AEsCBMb1JQlH2ayhlUbGYb">开</span><span class="dot closed" data-page-node-id="ZAnZ9paAcVfk5NWL1XPkbp">握</span><span class="dot closed" data-page-node-id="LGwyArY6KCGEt9wQBeWmhq">握</span><span class="dot open" data-page-node-id="WDFPTbObvoCdY2fkAYEwV2">开</span></div></td>
+        <td data-page-node-id="9H1n1fFCtRiRn0anY4W8DW">比心</td></tr>
+    <tr data-page-node-id="qtoCMhrhEJTuxDrmYzz0F3"><td class="mono" data-page-node-id="CahFNpIFNc8cJ8ip5zqDvW">one</td>
+        <td data-page-node-id="q0j0IRcUw9cb6E4BDEgRmP"><div class="fingers" data-page-node-id="64ORd3aQa4Ah0coKkLdhsN"><span class="dot closed" data-page-node-id="vSff7oB0H4n91WjWVYiSY7">握</span><span class="dot open" data-page-node-id="C6FKpqeWQEDbAjMGVo6IXN">开</span><span class="dot closed" data-page-node-id="yhHloqtk4lFm5KMROeTicg">握</span><span class="dot closed" data-page-node-id="8NdY9gGeJZ7cDmYRfzgFxK">握</span><span class="dot closed" data-page-node-id="HRKsOlOVqJpL0zR53IOAHj">握</span></div></td>
+        <td data-page-node-id="H41Zq2ka9ppnbV4SMWqabP">比 1，只伸食指</td></tr>
+    <tr data-page-node-id="m54kpuxLdrNcaGqBQfdjob"><td class="mono" data-page-node-id="CB17io7uxRUVACIOGLWMFJ">two</td>
+        <td data-page-node-id="uAYjVa0bm8qBKzmDj7jcp3"><div class="fingers" data-page-node-id="hOdF23ZtAZZ6qHKKgQjh4d"><span class="dot closed" data-page-node-id="fGnecRm5CETmAPduV4eA97">握</span><span class="dot open" data-page-node-id="cisXoR4BprUyK2tbwTPr4y">开</span><span class="dot open" data-page-node-id="gAl89Txt0M8Ue668DVD4Uq">开</span><span class="dot closed" data-page-node-id="rPAiprOgyQPvHGGQvm3SKn">握</span><span class="dot closed" data-page-node-id="uNNVCl73eptHCoUX6Qkg2i">握</span></div></td>
+        <td data-page-node-id="4mGIC8i11vhdQH4cuvvQ1c">剪刀手</td></tr>
+    <tr data-page-node-id="tdlZWEw9gRmM2Xj0EPOb2Z"><td class="mono" data-page-node-id="E3FGJyO4ENwGniv2RzRpin">three</td>
+        <td data-page-node-id="REFLcwtWbI19NkhVUh4j6a"><div class="fingers" data-page-node-id="B5qhq7pbyiYSD4Cq3mGfIl"><span class="dot closed" data-page-node-id="gexZxwBj6wdrAeqt4GfIyu">握</span><span class="dot open" data-page-node-id="lbDpGvDZN0lD2r4fthUAme">开</span><span class="dot open" data-page-node-id="GalJp3BUGtRx936HrwAEju">开</span><span class="dot open" data-page-node-id="JKCOBOYfiwPDy737LTadRa">开</span><span class="dot closed" data-page-node-id="BgNYpv1Gwrrfx0xdGV1Fv4">握</span></div></td>
+        <td data-page-node-id="CR33yGzagEmtS3HWbgy56z">比 3</td></tr>
+    <tr data-page-node-id="yzjVwHpAxPR6oqVCN69HOH"><td class="mono" data-page-node-id="NeXd8orQrC5xALGZ1GaWRs">four</td>
+        <td data-page-node-id="Fsox6r1wYxcILfVEAK9opl"><div class="fingers" data-page-node-id="RgCEucWM0bIKVGDsE6nUea"><span class="dot closed" data-page-node-id="YYXNjJhYWQZ39300V4RIUG">握</span><span class="dot open" data-page-node-id="zeVHeMLBkWzouGdVm1PLfG">开</span><span class="dot open" data-page-node-id="VkVzDHfQRCGYEeZJLS2wAR">开</span><span class="dot open" data-page-node-id="zJZvndvKwx3El1oizRHPP6">开</span><span class="dot open" data-page-node-id="0yKl5k9zsGUU2ZvDjL5kIy">开</span></div></td>
+        <td data-page-node-id="fHZJQM4bdQnzK8OMfyvF8N">比 4</td></tr>
+    <tr data-page-node-id="rekKY2qTUwclYggwplGil0"><td class="mono" data-page-node-id="Teeyztz6NlYYxZlopL1C4y">scratch</td>
+        <td data-page-node-id="zIq2rBJaeljuwuovgMDQL3"><div class="fingers" data-page-node-id="hWpCoXvwyvM9sx28v2csGi"><span class="dot open" data-page-node-id="UU2sEqJx388WDOTFT3THvU">开</span><span class="dot closed" data-page-node-id="rA4YVURDLX90LbmaDbVaXy">握</span><span class="dot open" data-page-node-id="j9jYER666Ehy7JHUcBNH7z">开</span><span class="dot open" data-page-node-id="yfT6RzI3x1nH4u0dU4V4FC">开</span><span class="dot open" data-page-node-id="vJAd6PWbNkFh8WdGDXbFIX">开</span></div></td>
+        <td data-page-node-id="eNxQBYAFmgA2hG6dmfudF9">挠痒痒</td></tr>
+    <tr data-page-node-id="EFv9UOK3ePEB2P6P3BnNcv"><td class="mono" data-page-node-id="YzCNC8KJJlH2IgLRTaUVKF">come</td>
+        <td data-page-node-id="lBOdghNmE4aPnMUEI4QRi8"><div class="fingers" data-page-node-id="QfvurAdBJltD2y6WCjYfRh"><span class="dot open" data-page-node-id="qVnn3g83RboE2ELIY8FEBc">开</span><span class="dot open" data-page-node-id="HRaDiyEdwA2I4yIVAa2mfr">开</span><span class="dot closed" data-page-node-id="3HIXlWwOf0TlskU0Fc6ZOl">握</span><span class="dot open" data-page-node-id="9zcKjcY79SCJKmxcnZHtQn">开</span><span class="dot open" data-page-node-id="ORL54eAVRYMryEOWYMiHSe">开</span></div></td>
+        <td data-page-node-id="UaVY7E0JBot44lEVjbWFiP">勾手</td></tr>
+    <tr data-page-node-id="oWAEVxl4WsgqyJnzIaHsRz"><td class="mono" data-page-node-id="2fQOSHtndDGjunBWZ4g81C">servo_1=90</td>
+        <td colspan="2" data-page-node-id="wLUQ7nIQly0Fv3PDJ0gSZI">单根控制格式：<code data-page-node-id="pCD6O7CA5EmtxbkGtxVBkY">servo_手指编号=角度</code>，编号 0~4，角度 0~180</td></tr>
+  </table>
+</section>
+
+<!-- ================= 7 ================= -->
+<section id="s7" data-page-node-id="CtGrYmCMBpnpmcFu1dcXyy">
+  <h2 data-page-node-id="IvmE0nBgUyqOQAcDjU3f2B"><span class="num" data-page-node-id="GZMQxDIRolgzSA3WlReLAR">7</span>动手改一改（5 个小练习）</h2>
+  <p class="lead" data-page-node-id="QteXbCCC9uCvdt2YbKB5k7">读懂代码最好的方式是改它。从最简单的开始：</p>
+
+  <h4 data-page-node-id="3mgNrADBOY4N2c6CRPxQ9c">练习 1 · 调速度 <span style="color:#888780;font-weight:400" data-page-node-id="7QnW29gkNwejknMRN59E7D">（第 49 行）</span></h4>
+  <pre data-page-node-id="hFiEKIS2WVDQzr26iZDuW3"><code data-page-node-id="qMRHApa2F0rsY0X61NH10n"><span class="k" data-page-node-id="8ALT9gp1bKBPXHo6yaINUI">#define</span> DEFAULT_STEP <span class="n" data-page-node-id="hxC4UW6BXHLZDhVLfuehwM">2.0f</span>   <span class="c" data-page-node-id="18K4GnCVVphr2fhpsZtXXp">// 改成 0.5f 试试，会明显变慢变柔和</span></code></pre>
+
+  <h4 data-page-node-id="tuEgU5QDKYSePXjOQlOiiB">练习 2 · 加一个新手势 <span style="color:#888780;font-weight:400" data-page-node-id="LKfEGFCPriWGIZCsh4cnlZ">（第 179 行前）</span></h4>
+  <pre data-page-node-id="cdWUfbHh8WxoXwKzGOMFVF"><code data-page-node-id="Z4ueoUjhtHh70rq3DadNMf">} <span class="k" data-page-node-id="HCPCUr2KwL0RcOpl94HAIt">else if</span> (name == <span class="s" data-page-node-id="18cAQSbXnyVf8VKCEwXdIM">"hello"</span>) {
+  hand-&gt;fingers[<span class="n" data-page-node-id="UKwyNQxahkbBtAet8ZWdbB">0</span>]-&gt;<span class="f" data-page-node-id="kERCciBMR8R0Bti0h60Ym7">setTargetNormalized</span>(<span class="n" data-page-node-id="HYqrL3AWjafp1IcmtgkRZ0">0</span>);     <span class="c" data-page-node-id="CPdqgoBR4dRbkJrb9jTCmH">// 拇指 开</span>
+  hand-&gt;fingers[<span class="n" data-page-node-id="ExVvLTL5W39PDlLSGHuoYc">1</span>]-&gt;<span class="f" data-page-node-id="8EES23Xe4pEhFnI2BW3BNk">setTargetNormalized</span>(<span class="n" data-page-node-id="uwqBTZMGyNFm75x0uEQOQS">0</span>);     <span class="c" data-page-node-id="Idq7p4k50qByG4mzhKC0CU">// 食指 开</span>
+  hand-&gt;fingers[<span class="n" data-page-node-id="I9gS4EteEJ7scgvXlENldI">2</span>]-&gt;<span class="f" data-page-node-id="TYvUDk1BWxI0XqWl0vVPvu">setTargetNormalized</span>(<span class="n" data-page-node-id="no8xV8SddgNbKx7gPa8QKp">100</span>);   <span class="c" data-page-node-id="kUtpCLfaF5jKA4ubfxT6g1">// 中指 握</span>
+  hand-&gt;fingers[<span class="n" data-page-node-id="O5jn7DhuYrg8QaH9dgEV6E">3</span>]-&gt;<span class="f" data-page-node-id="CMhSDnxSqwMsfpvC7XRalb">setTargetNormalized</span>(<span class="n" data-page-node-id="SlEPpq5lFI9xa0HGJKW9D8">100</span>);   <span class="c" data-page-node-id="tZDARnr78WZEwlB6sElCzd">// 无名指 握</span>
+  hand-&gt;fingers[<span class="n" data-page-node-id="r4hIY683NDywysBAY3HrI1">4</span>]-&gt;<span class="f" data-page-node-id="1JrCdMyBAt2Anxu5jZ5FDn">setTargetNormalized</span>(<span class="n" data-page-node-id="3ZWVyKDSpkq0qpuTi4Gtwe">100</span>);   <span class="c" data-page-node-id="gDr2pkJILcA5XA8Q4mUTCl">// 小指 握</span>
+}</code></pre>
+  <p data-page-node-id="p61EaTxO3JEUOy1QdEaUx3">改完重新烧录，然后在 App 里发 <code data-page-node-id="yA11Qz3OEtBzi4d4S7SY8g">hello</code> 试试。</p>
+
+  <h4 data-page-node-id="ptvXvav7HodfllvOb6Py9O">练习 3 · 修正反装的手指 <span style="color:#888780;font-weight:400" data-page-node-id="yFYoBfotuequmN4MKhOt9D">（第 99~103 行）</span></h4>
+  <p data-page-node-id="JHAfCVe7wYthGHFqEy0BQY">如果某根手指是"指令让它张开、它反而握紧"，就把那一行最后的 <code data-page-node-id="NEvt22wDZzUVjGU0slrIaV">1</code> 改成 <code data-page-node-id="pstktx3ctlVmGEHFD3q2ht">-1</code>（或反过来）。</p>
+
+  <h4 data-page-node-id="I6eCI6hENelzDi1sGG1vpB">练习 4 · 校准舵机脉宽 <span style="color:#888780;font-weight:400" data-page-node-id="f6huVKjEqdk8lHtUaOm6qI">（第 21~22 行）</span></h4>
+  <pre data-page-node-id="FIFrJhsrRqkRotwa1SpStU"><code data-page-node-id="hNKcIlxIXPjq3IYPtRT7zQ"><span class="k" data-page-node-id="CHvJZiM6tM22w1VU0H1XVx">#define</span> SERVO_MIN_PULSE <span class="n" data-page-node-id="OGCA3Dk5FVplDODoDCGbRV">150</span>   <span class="c" data-page-node-id="6iZdVeUkSbwjUXCwnTR4Kt">// 转不到最开 → 调小一点</span>
+<span class="k" data-page-node-id="oDWiSvUcSigJgecozJJpHr">#define</span> SERVO_MAX_PULSE <span class="n" data-page-node-id="ZBunPwZEGBVENLhbFckSDY">500</span>   <span class="c" data-page-node-id="bA29oCCrEIHfKAva7bpWGP">// 转不到最紧 / 嗡嗡响 → 调小</span></code></pre>
+  <div class="warn" data-page-node-id="Zfkq51QEeVFksyHr6B37hd">
+    <span class="lbl" data-page-node-id="utXqjgDn5KGgGzNMp863zV">安全提醒</span>
+    <b data-page-node-id="pFYcLeCovtlHmHVXOlWb0a">每次只改 10~20，边改边试。</b>数值调得太大，舵机会堵转发热，时间长了会烧掉。改之前先把手指从机械结构上松一松更稳妥。
+  </div>
+
+  <h4 data-page-node-id="oC1ob22TT1OFCaURZn7tzP">练习 5 · 换蓝牙设备名 <span style="color:#888780;font-weight:400" data-page-node-id="wNlz8T3MsHB3BtGbjRspz8">（第 247 行）</span></h4>
+  <pre data-page-node-id="NhFvWOCJ7ThbAlXCHVeH02"><code data-page-node-id="8nybPH0Q16b6H3wnI9OyHm">BLEDevice::<span class="f" data-page-node-id="2QnFggRIkXjTBWhXbLJpc6">init</span>(<span class="s" data-page-node-id="fLnNbcRUcPiE1Xlq7k4AiC">"xiaochu"</span>);   <span class="c" data-page-node-id="aCk8XyUpnTN2TKnCiTbFp3">// 改成你想叫的名字</span></code></pre>
+</section>
+
+<!-- ================= 8 ================= -->
+<section id="s8" data-page-node-id="LEHKQiEf74hUwf63hCv9i7">
+  <h2 data-page-node-id="I4k7CYIoXqrK3QsZ3BXKgc"><span class="num" data-page-node-id="gz1UaI6mpmBF9BlCvoBoPj">8</span>排错清单</h2>
+  <table data-page-node-id="6Vg8uEQg69M6uLfAbil6nT">
+    <tr data-page-node-id="j1Aj7EGgJT2JGSCoDKZnTx"><th style="width:230px" data-page-node-id="kgJOzzq7dAX9U9144OzieA">现象</th><th data-page-node-id="3TzRgWZiOpbIquhQWVFaAx">先查这里</th></tr>
+    <tr data-page-node-id="sk7xjUpaYV6wVb9g1FTGjj"><td data-page-node-id="WCcNApAIc1cGafqfBnSwZb">串口一直报 <span class="mono" data-page-node-id="mz0HBtagIhRYxpf6gxt3r7">PCA9685 not found</span></td>
+        <td data-page-node-id="V6bXD2ddzXus4XylU80t03">硬件问题。查 SDA→GPIO8、SCL→GPIO9 是否接反、VCC 是否 3.3V、GND 是否共地、OE 是否接 GND</td></tr>
+    <tr data-page-node-id="EdOwr0IgCKHIMcLGLHGrs6"><td data-page-node-id="PeYEQRKdahNksr5hEfAzxd">手机搜不到蓝牙设备</td>
+        <td data-page-node-id="XiQFvJWMECp4iRsYHhRG0i">确认 <code data-page-node-id="oQZRa7H3xnSuSS30RB29kX">BLEDevice::init("xiaochu")</code> 里的名字；确认程序真的跑到了 <code data-page-node-id="YyVWfGl0Qy2Hz0LeWly7O7">pAdvertising->start()</code>（即前面没卡在 while(1)）</td></tr>
+    <tr data-page-node-id="btWPvoYPXZoUpaIKSRgJs8"><td data-page-node-id="ySaFB6l0XBKOkPpTzfl4Nc">能连上，但发指令没反应</td>
+        <td data-page-node-id="DvGWbOnTQJl6tKhQyV8YtL">打开串口监视器（115200）看有没有 <code data-page-node-id="9u8kDEcbG2CXzvKMG7FOIO">Received:</code>。有 → UUID 或解析逻辑问题；没有 → App 端写入的 UUID 不对</td></tr>
+    <tr data-page-node-id="N7GqGBe4gVXWOFYOzCYx5k"><td data-page-node-id="QaaD5AICtif2ZY5iacHp6g">串口全是乱码</td>
+        <td data-page-node-id="AnqIvMzFlvCNopyUgtNnpz">波特率没选 115200</td></tr>
+    <tr data-page-node-id="oo3FpwoOSWVozOmBC7aqye"><td data-page-node-id="A1r49jEkAttzMMu6dWblhq">手指动作方向反了</td>
+        <td data-page-node-id="wz9WEiHTOF4Oqz7ofsevPd">改 <code data-page-node-id="8x6McfBbl5U5YBe5NODv7P">Hand()</code> 里那一行的 1 / -1</td></tr>
+    <tr data-page-node-id="xYeDEyk3cdj0ZI7QsdnuwH"><td data-page-node-id="O2jHwrUYO2XUQTBvIiiUKv">舵机嗡嗡响、发烫</td>
+        <td data-page-node-id="jdpv4LceyqOv4aCKSxLy3v">立刻断电。脉宽范围超了，把 <code data-page-node-id="qTAjlnTXttFFflVyPITH8B">SERVO_MAX_PULSE</code> 调小</td></tr>
+    <tr data-page-node-id="tUsoQ8wZV6DpF3oXtGsfbr"><td data-page-node-id="nMM5Q2n3E743Dv8rjz5Z1x">手指抖个不停</td>
+        <td data-page-node-id="QCTxPqJzgBxn4MTVwzWofE">舵机供电不足。PCA9685 的 V+ 必须外接独立 5V 电源，<b data-page-node-id="95kRqqgSeP4E25A2sluAUA">绝不能从 ESP32 取电</b></td></tr>
+    <tr data-page-node-id="kLb8rlAWC7QQlRwvjFC0Hg"><td data-page-node-id="tRqAPFBT1YwHFhLBMJwiFc">动作一顿一顿的</td>
+        <td data-page-node-id="rgG6e3o4W2ZwOsQu4rxuP1">把 <code data-page-node-id="CVlKANtD1BQFw1Qkj4dMcx">DEFAULT_STEP</code> 调小，或把 <code data-page-node-id="omfglVUbRSy2MZYaz4F6HZ">delay(10)</code> 改成 <code data-page-node-id="JjGBMF0D7eTGrVW00Pnl7P">delay(5)</code>（会更细腻但也更吃 CPU）</td></tr>
+  </table>
+
+  <div class="note" data-page-node-id="piC3rZIWjwlPAy6Qh3ZCAN">
+    <span class="lbl" data-page-node-id="xXyssJhVTHd4GoujtzzltT">供电这一条最容易忽略</span>
+    SG90 舵机在启动瞬间电流能到 1A 以上，5 个一起动可能超过 3A。ESP32 的 3.3V 引脚连 1 个都带不动。<b data-page-node-id="SwMGBgSMnQceGqNHK4MRL4">正确接法：V+ 接独立 5V 电源正极，电源 GND 和 ESP32 的 GND 连通（共地）。</b>
+  </div>
+</section>
+
+<footer data-page-node-id="JzgyDCaFhjFt5buYPUok6q">
+  小楚君机械手开源项目 · 程序精读手册（零基础版）<br data-page-node-id="lRpSRk5HFSXFwWKXSLuQD4">
+  对应源码：<span class="mono" data-page-node-id="Oi9wCUmJGYgNMbErAJLu86">主控代码 / sketch_26_7_4.ino</span>（269 行）· 逐行注释版：<span class="mono" data-page-node-id="YHHp9ttY7G4CQHWE63qPb6">sketch_26_7_4_零基础注释版.ino</span>
+</footer>
+
+</main>
+</div>
+</body>
+</html>
