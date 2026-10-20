@@ -389,6 +389,7 @@ class MyServerCallbacks : public BLEServerCallbacks {
     needRestartAdv = true;      // 广播由 loopTask 负责重开，不在回调里阻塞
     HandCommand home = {};
     home.type = CMD_HOME;
+    home.tRx  = micros();       // 必须赋值：否则 tRx=0，延迟会算成"开机至今"的时长
     enqueueCommand(home);       // 断连回张开位，机械手不会僵在半紧状态
 
     // 断连保护计时起点：从这里到"五根手指全部静止"用了多久
@@ -452,9 +453,13 @@ static void motionTask(void* pvParameters) {
         markPending = false;
       }
 #if RTOS_DEBUG
-      uint32_t dt = (uint32_t)(micros() - firstRx);
-      latRecord(dt);
-      Serial.printf("[LATENCY] board-side = %lu us\n", (unsigned long)dt);
+      // tRx=0 说明这条指令的来源没有打时间戳（例如未来新增的入口忘了赋值），
+      // 直接跳过统计，否则 micros()-0 会得到"开机至今"，把 latMax/latSum 全带偏。
+      if (firstRx != 0) {
+        uint32_t dt = (uint32_t)(micros() - firstRx);
+        latRecord(dt);
+        Serial.printf("[LATENCY] board-side = %lu us\n", (unsigned long)dt);
+      }
 #endif
     }
 
