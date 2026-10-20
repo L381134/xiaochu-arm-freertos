@@ -8,6 +8,7 @@
 //    3. loop() 只负责"断连后重开广播"这一件事
 //    4. 断连时自动回到张开位（通过队列下发，不跨任务改状态）
 //    5. 舵机没动就不写 I2C，减少总线占用
+//    6. 新增带 XOR 校验的文本帧协议（$S1,120*7D），旧文本指令仍兼容
 //
 //  任务划分：
 //    BT task（协议栈自带，19 左右）→ onWrite 只做解析 + 入队（微秒级）
@@ -311,6 +312,127 @@ static bool enqueueCommand(const HandCommand& cmd) {
 }
 
 // ========================================================================
+//  三点五、协议层：文本帧 + XOR 校验（D3）
+// ------------------------------------------------------------------------
+//  帧格式：  $<body>*<HH>
+//    body = S<finger>,<angle>    例：S1,120
+//           G<gesture>           例：GFIST
+//    HH   = body 全部字节按位异或，两位十六进制（大小写都收）
+//
+//  为什么要加校验：
+//    原版是 startsWith("servo_") 直接解析文本。BLE 丢字节或截断时会产生
+//    "servo_1=1" 这种残帧，它照样 toInt() 成一个合法角度并执行 —— 错误
+//    指令被当成正常指令跑掉，日志里看不出任何异常。加校验后残帧一律拒收，
+//    并且能报出拒收原因。
+//
+//  为什么还是文本而不是二进制：
+//    上位机输入框、nRF Connect 都能直接手输，调试成本最低。二进制帧在
+//    手机上没法手打，这个项目不值得为它牺牲可测性。
+//
+//  为什么不用 String：
+//    这段代码跑在 BLE 回调里（协议栈任务上下文），堆分配会长期留下碎片。
+//    全程 const char* + 逐字符解析，零分配。
+// ========================================================================
+enum ProtoErr : uint8_t {
+  PROTO_OK = 0,
+  PROTO_ERR_START,     // 不是以 '$' 开头
+  PROTO_ERR_NO_STAR,   // 缺少 '*' 分隔符
+  PROTO_ERR_CHK_LEN,   // 校验位不是 2 位十六进制
+  PROTO_ERR_CHK,       // 校验值不匹配
+  PROTO_ERR_CMD,       // 未知指令类型
+  PROTO_ERR_RANGE,     // 参数越界
+  PROTO_ERR_FORMAT     // 字段残缺
+};
+#define PROTO_ERR_COUNT 8
+
+static const char* const PROTO_ERR_NAME[PROTO_ERR_COUNT] = {
+  "OK", "no-start", "no-star", "chk-len", "chk-mismatch", "bad-cmd", "range", "format"
+};
+
+static volatile uint32_t protoOk = 0;                  // 通过校验并执行的帧数
+static volatile uint32_t protoErr[PROTO_ERR_COUNT] = {0};  // 各类拒收计数
+
+static uint8_t hexVal(char c) {
+  if (c >= '0' && c <= '9') return (uint8_t)(c - '0');
+  if (c >= 'A' && c <= 'F') return (uint8_t)(c - 'A' + 10);
+  if (c >= 'a' && c <= 'f') return (uint8_t)(c - 'a' + 10);
+  return 0xFF;                                    // 非法字符
+}
+
+// 解析一帧。成功返回 PROTO_OK 并把结果写进 out（不改 out.tRx，调用者填）。
+// calcOut 非空时回填实际算出的校验值，用于把"期望值"打印给手敲帧的人。
+static ProtoErr parseFrame(const char* s, size_t len, HandCommand& out,
+                           uint8_t* calcOut) {
+  // 有些客户端会自动补 0x0A / 0x0D，先削掉尾部空白再算长度
+  while (len > 0 && (s[len - 1] == '\n' || s[len - 1] == '\r' || s[len - 1] == ' ')) len--;
+
+  if (len < 4 || s[0] != '$') return PROTO_ERR_START;
+
+  size_t star = 0;
+  for (size_t i = 1; i < len; i++) {
+    if (s[i] == '*') { star = i; break; }
+  }
+  if (star == 0) return PROTO_ERR_NO_STAR;
+  if (star + 3 > len) return PROTO_ERR_CHK_LEN;    // 校验位不够 2 位
+  if (star + 3 < len) return PROTO_ERR_FORMAT;     // 校验位后面还有多余字节
+
+  uint8_t hi = hexVal(s[star + 1]);
+  uint8_t lo = hexVal(s[star + 2]);
+  if (hi == 0xFF || lo == 0xFF) return PROTO_ERR_CHK_LEN;
+  uint8_t expectChk = (uint8_t)((hi << 4) | lo);
+
+  uint8_t calcChk = 0;
+  for (size_t i = 1; i < star; i++) calcChk ^= (uint8_t)s[i];
+  if (calcOut) *calcOut = calcChk;
+  if (calcChk != expectChk) return PROTO_ERR_CHK;
+
+  const char kind = s[1];
+
+  if (kind == 'S' || kind == 's') {
+    // S<finger>,<angle>
+    const char* p   = s + 2;
+    const char* end = s + star;
+    if (p >= end || *p < '0' || *p > '9') return PROTO_ERR_FORMAT;
+
+    long finger = 0;
+    while (p < end && *p >= '0' && *p <= '9') { finger = finger * 10 + (*p - '0'); p++; }
+    if (p >= end || *p != ',') return PROTO_ERR_FORMAT;
+    p++;
+    if (p >= end || *p < '0' || *p > '9') return PROTO_ERR_FORMAT;
+
+    long angle = 0;
+    while (p < end && *p >= '0' && *p <= '9') { angle = angle * 10 + (*p - '0'); p++; }
+    if (p != end) return PROTO_ERR_FORMAT;         // 角度后面还有杂物
+
+    if (finger < 0 || finger > 4) return PROTO_ERR_RANGE;
+    if (angle  < 0 || angle  > 180) return PROTO_ERR_RANGE;
+
+    out.type    = CMD_ANGLE;
+    out.finger  = (uint8_t)finger;
+    out.angle   = (uint8_t)angle;
+    out.gesture[0] = '\0';
+    return PROTO_OK;
+  }
+
+  if (kind == 'G' || kind == 'g') {
+    size_t n = star - 2;                           // 手势名长度
+    if (n == 0 || n >= sizeof(out.gesture)) return PROTO_ERR_FORMAT;
+    for (size_t i = 0; i < n; i++) {
+      char c = s[2 + i];
+      if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');   // 统一小写
+      out.gesture[i] = c;
+    }
+    out.gesture[n] = '\0';
+    out.type   = CMD_GESTURE;
+    out.finger = 0;
+    out.angle  = 0;
+    return PROTO_OK;
+  }
+
+  return PROTO_ERR_CMD;
+}
+
+// ========================================================================
 //  四、BLE 层：回调里只解析 + 入队，绝不碰舵机
 // ========================================================================
 class MyCallbacks : public BLECharacteristicCallbacks {
@@ -318,7 +440,43 @@ class MyCallbacks : public BLECharacteristicCallbacks {
     auto value = pCharacteristic->getValue();
     if (value.length() == 0) return;
 
-    String cmd = String(value.c_str());
+    const char* raw = value.c_str();
+    size_t rawLen   = value.length();
+
+    // ---- 优先走帧路径：'$' 开头，全程不碰 String ----
+    if (raw[0] == '$') {
+      HandCommand c = {};
+      uint8_t calc = 0;
+      ProtoErr e = parseFrame(raw, rawLen, c, &calc);
+
+      if (e != PROTO_OK) {
+        protoErr[e]++;
+        // 校验错时把正确值打出来：这个协议是手敲的，不给提示根本没法调
+        if (e == PROTO_ERR_CHK) {
+          Serial.printf("[PROTO] reject: %s | calc should be *%02X | raw=%s\n",
+                        PROTO_ERR_NAME[e], calc, raw);
+        } else {
+          Serial.printf("[PROTO] reject: %s | raw=%s\n", PROTO_ERR_NAME[e], raw);
+        }
+        return;                       // 拒收：不入队、不动作
+      }
+
+      protoOk++;
+      c.tRx = micros();
+      if (!enqueueCommand(c)) {
+        Serial.println("[QUEUE] enqueue failed");
+        return;
+      }
+      markPending = true;
+      MARK_HIGH();
+#if RTOS_DEBUG
+      Serial.printf("[PROTO] ok: type=%d finger=%u angle=%u chk=%02X\n",
+                    c.type, c.finger, c.angle, calc);
+#endif
+      return;
+    }
+
+    String cmd = String(raw);
     cmd.trim();
     if (cmd.length() == 0) return;
 
@@ -331,8 +489,9 @@ class MyCallbacks : public BLECharacteristicCallbacks {
       if      (which == "flood")  id = 1;
       else if (which == "stream") id = 2;
       else if (which == "estop")  id = 3;
+      else if (which == "proto")  id = 4;
       else {
-        Serial.println("[TEST] unknown. use test=flood | test=stream | test=estop");
+        Serial.println("[TEST] unknown. use test=flood | test=stream | test=estop | test=proto");
         return;
       }
       if (testReqQ != nullptr) xQueueSend(testReqQ, &id, 0);
@@ -522,6 +681,79 @@ static void pushGesture(const char* name) {
   enqueueCommand(c);
 }
 
+// ---------- D3 自测：16 条用例，覆盖正常帧和全部 7 种错误码 ----------
+// 固件自带的单元测试：不依赖上位机、不依赖硬件，烧进去发 test=proto 就跑。
+// 协议解析这种"纯逻辑"最适合这样测 —— 改一行校验逻辑，跑一次就知道有没有破。
+struct ProtoCase {
+  const char* frame;
+  ProtoErr    expect;
+  int8_t      finger;     // -1 = 不校验
+  int16_t     angle;      // -1 = 不校验
+  const char* gesture;    // nullptr = 不校验
+};
+
+static const ProtoCase PROTO_CASES[] = {
+  // ---- 应当通过 ----
+  { "$S1,120*7D",  PROTO_OK,          1, 120, nullptr },
+  { "$S1,90*47",   PROTO_OK,          1,  90, nullptr },
+  { "$s1,120*5D",  PROTO_OK,          1, 120, nullptr },   // 指令字小写
+  { "$S1,120*7d",  PROTO_OK,          1, 120, nullptr },   // 校验位小写
+  { "$GFIST*4F",   PROTO_OK,         -1,  -1, "fist"  },
+  { "$GFIVE*5B",   PROTO_OK,         -1,  -1, "five"  },
+  // ---- 应当拒收 ----
+  { "S1,120*7D",   PROTO_ERR_START,  -1,  -1, nullptr },   // 缺 $
+  { "$S1,120",     PROTO_ERR_NO_STAR,-1,  -1, nullptr },   // 缺 *
+  { "$S1,120*7",   PROTO_ERR_CHK_LEN,-1,  -1, nullptr },   // 校验位只有 1 位
+  { "$S1,120*ZZ",  PROTO_ERR_CHK_LEN,-1,  -1, nullptr },   // 校验位不是十六进制
+  { "$S1,120*00",  PROTO_ERR_CHK,    -1,  -1, nullptr },   // 校验值错
+  { "$S9,120*75",  PROTO_ERR_RANGE,  -1,  -1, nullptr },   // 手指号越界
+  { "$S1,200*7C",  PROTO_ERR_RANGE,  -1,  -1, nullptr },   // 角度越界
+  { "$S1*62",      PROTO_ERR_FORMAT, -1,  -1, nullptr },   // 缺逗号和角度
+  { "$G*47",       PROTO_ERR_FORMAT, -1,  -1, nullptr },   // 手势名为空
+  { "$X1,120*76",  PROTO_ERR_CMD,    -1,  -1, nullptr },   // 未知指令字
+};
+
+static void runProtoTest() {
+  const int n = (int)(sizeof(PROTO_CASES) / sizeof(PROTO_CASES[0]));
+  int pass = 0;
+  Serial.printf("[PROTO-TEST] start, %d cases\n", n);
+
+  for (int i = 0; i < n; i++) {
+    const ProtoCase& tc = PROTO_CASES[i];
+    HandCommand c = {};
+    ProtoErr got = parseFrame(tc.frame, strlen(tc.frame), c, nullptr);
+
+    bool ok = (got == tc.expect);
+    // 只比对错误码还不够：解析成功但字段错了，同样算失败
+    if (ok && got == PROTO_OK) {
+      if (tc.finger  >= 0 && c.finger != (uint8_t)tc.finger)  ok = false;
+      if (tc.angle   >= 0 && c.angle  != (uint8_t)tc.angle)   ok = false;
+      if (tc.gesture && strcmp(c.gesture, tc.gesture) != 0)   ok = false;
+    }
+
+    char detail[24] = "";
+    if (ok && got == PROTO_OK) {
+      if (c.type == CMD_ANGLE) snprintf(detail, sizeof(detail), "f%u/a%u", c.finger, c.angle);
+      else                     snprintf(detail, sizeof(detail), "g=%s", c.gesture);
+    }
+
+    Serial.printf("[PROTO-TEST] %2d %-14s expect=%-12s got=%-12s %s %s\n",
+                  i + 1, tc.frame,
+                  PROTO_ERR_NAME[tc.expect], PROTO_ERR_NAME[got],
+                  ok ? "PASS" : "FAIL", detail);
+    if (ok) pass++;
+  }
+
+  Serial.printf("[PROTO-TEST] %d/%d passed\n", pass, n);
+
+  // 真实流量统计（自测只调 parseFrame，不经过 onWrite，所以这里报的是之前累计值）
+  Serial.printf("[PROTO] live: ok=%lu", (unsigned long)protoOk);
+  for (int i = 1; i < PROTO_ERR_COUNT; i++) {
+    if (protoErr[i]) Serial.printf(", %s=%lu", PROTO_ERR_NAME[i], (unsigned long)protoErr[i]);
+  }
+  Serial.println();
+}
+
 static void testTask(void* pvParameters) {
   (void)pvParameters;
   uint8_t id = 0;
@@ -573,6 +805,9 @@ static void testTask(void* pvParameters) {
         vTaskDelay(pdMS_TO_TICKS(200));
       }
       Serial.println("[TEST] estop: BLE lost, waiting for settle ...");
+    } else if (id == 4) {
+      // ---- proto：协议解析自测，不碰硬件 ----
+      runProtoTest();
     }
   }
 }
