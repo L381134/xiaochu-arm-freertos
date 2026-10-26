@@ -452,15 +452,16 @@ static ProtoErr parseFrame(const char* s, size_t len, HandCommand& out,
 }
 
 // ========================================================================
-//  四、BLE 层：回调里只解析 + 入队，绝不碰舵机
+//  四、统一指令入口：BLE 与串口共用同一套解析
 // ========================================================================
-class MyCallbacks : public BLECharacteristicCallbacks {
-  void onWrite(BLECharacteristic* pCharacteristic) override {
-    auto value = pCharacteristic->getValue();
-    if (value.length() == 0) return;
+// 为什么抽出来：原来解析逻辑直接长在 onWrite 回调里，只有 BLE 能进指令。
+// 手机端一旦出问题（没真正连上、写到别的特征值、app 吞掉了字符串），
+// 板子就一点反应都没有，而且看不到任何报错 —— 因为这段代码压根没被调用，
+// 现场很容易误判成"固件卡死"。
+// 现在两条入口走同一个函数，行为完全一致，排查时可以先从串口确认固件是好的。
+static bool serTestMode = false;   // true = 本次 test= 由串口发起，不检查 BLE 连接
 
-    const char* raw = value.c_str();
-    size_t rawLen   = value.length();
+static void handleCommandText(const char* raw, size_t rawLen, bool fromSerial) {
 
     // ---- 优先走帧路径：'$' 开头，全程不碰 String ----
     if (raw[0] == '$') {
@@ -515,8 +516,10 @@ class MyCallbacks : public BLECharacteristicCallbacks {
         Serial.println("[TEST] unknown. use test=flood|stream|estop|proto|i2c|scan");
         return;
       }
+      serTestMode = fromSerial;        // 串口发起的测试不该被"没连 BLE"卡住
       if (testReqQ != nullptr) xQueueSend(testReqQ, &id, 0);
-      Serial.printf("[TEST] %s requested\n", which.c_str());
+      Serial.printf("[TEST] %s requested (%s)\n", which.c_str(),
+                    fromSerial ? "serial" : "ble");
       return;
     }
 #endif
@@ -553,8 +556,44 @@ class MyCallbacks : public BLECharacteristicCallbacks {
     MARK_HIGH();               // 标记脚拉高：延迟测量的起点
 
 #if RTOS_DEBUG
-    Serial.printf("[BLE] queued type=%d, free heap=%u\n", c.type, (unsigned)ESP.getFreeHeap());
+    Serial.printf("[CMD] queued type=%d, free heap=%u\n", c.type, (unsigned)ESP.getFreeHeap());
 #endif
+}
+
+// ---------- 串口调试通道 ----------
+// 串口监视器里敲一行、回车即可，和 BLE 发同样的字符串：
+//   $GFIST*4F        手势（帧格式）
+//   servo_1=120      单指
+//   test=stream      批测，60 条样本自动统计
+// 用途：手机端出问题时，先在这里确认固件本身是好的，直接排除一大类怀疑。
+static char   serBuf[80];
+static size_t serLen = 0;
+
+static void pollSerialCmd() {
+  while (Serial.available()) {
+    char ch = (char)Serial.read();
+    if (ch == '\r') continue;                 // Windows 换行是 \r\n，丢掉 \r
+    if (ch == '\n') {
+      if (serLen == 0) continue;
+      serBuf[serLen] = '\0';
+      Serial.printf("[SER] > %s\n", serBuf);
+      handleCommandText(serBuf, serLen, true);
+      serLen = 0;
+      continue;
+    }
+    if (serLen < sizeof(serBuf) - 1) serBuf[serLen++] = ch;
+    else serLen = 0;                          // 超长直接丢弃，不撑爆缓冲
+  }
+}
+
+// ========================================================================
+//  BLE 层：回调只把收到的字节转交给统一入口
+// ========================================================================
+class MyCallbacks : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic* pCharacteristic) override {
+    auto value = pCharacteristic->getValue();
+    if (value.length() == 0) return;
+    handleCommandText(value.c_str(), value.length(), false);
   }
 };
 
@@ -986,7 +1025,8 @@ static void testTask(void* pvParameters) {
   uint8_t id = 0;
 
   for (;;) {
-    if (xQueueReceive(testReqQ, &id, portMAX_DELAY) != pdTRUE) continue;
+    pollSerialCmd();                 // 串口调试通道：每 20ms 看一次输入
+    if (xQueueReceive(testReqQ, &id, pdMS_TO_TICKS(20)) != pdTRUE) continue;
 
     // 每个实验开始前清空，避免上一次的残留影响结论
     xQueueReset(cmdQueue);
@@ -1017,7 +1057,7 @@ static void testTask(void* pvParameters) {
       settleKind = SETTLE_STREAM;
 
       for (int i = 0; i < 60; i++) {
-        if (!bleConnected) { Serial.println("[TEST] aborted: BLE lost"); break; }
+        if (!bleConnected && !serTestMode) { Serial.println("[TEST] aborted: BLE lost"); break; }
         pushAngle(1, (uint8_t)(30 + i * 2));
         vTaskDelay(pdMS_TO_TICKS(50));
       }
@@ -1025,6 +1065,13 @@ static void testTask(void* pvParameters) {
                     (unsigned long)qDrop, (unsigned long)qDepthMax);
     } else if (id == 3) {
       // ---- estop：持续扫动，等你手动断开蓝牙 ----
+      // 串口发起的没有 BLE 可断，这个实验就失去意义了，直接跳过。
+      // 注意这里的 while 只在 bleConnected 为真时退出，所以它不会自己结束 ——
+      // 必须真的断开上位机，否则测试任务会被一直占住，后续 test= 全部不响应。
+      if (serTestMode) {
+        Serial.println("[TEST] estop 已跳过：这个实验必须真的断开 BLE 才有意义");
+        continue;
+      }
       Serial.println("[TEST] estop start: sweeping. 现在手动断开上位机");
       int k = 0;
       while (bleConnected) {
